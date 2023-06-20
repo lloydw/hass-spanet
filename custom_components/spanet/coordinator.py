@@ -46,6 +46,11 @@ class Coordinator(DataUpdateCoordinator):
         return int(value) / divisor
 
     async def _async_update_data(self):
+        """Fetch data from API endpoint.
+
+        This is the place to pre-process the data to lookup tables
+        so entities can quickly look up their data.
+        """
         try:
             if not self.spa:
                 self.spa = await self.spanet.get_spa(self.spa_config["id"])
@@ -53,5 +58,6 @@ class Coordinator(DataUpdateCoordinator):
                 return await self.spa.refresh_status()
 
         except SpaNetConnectionLost as exc:
+            _LOGGER.info('Connection lost')
             self.spa = None
             raise UpdateFailed("Failed updating spanet") from exc

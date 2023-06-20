@@ -62,9 +62,7 @@ class SpaPool:
         try:
             return self.last_status[key][int(index)]
         except (KeyError, IndexError) as exc:
-            logger.error(
-                "Failed to load data for status key %s", status_key, exc_info=exc
-            )
+            logger.error("Failed to load data for status key %s", status_key, exc_info=exc)
             logger.error("Status: %s", self.last_status)
             raise
 
@@ -72,7 +70,7 @@ class SpaPool:
         status = {}
 
         data = await self.send("RF", expect=13)
-        logger.info("GOT %s", data)
+        logger.debug("REFRESH GOT %s", data)
 
         for row in data.split("\r\n"):
             row_data = row.split(",")
@@ -89,16 +87,14 @@ class SpaPool:
             data = f"{command}\n"
         try:
             async with self.lock:
-                logger.info("SEND: %s", data)
+                logger.debug("SEND: %s", data)
                 await self.loop.sock_sendall(self.socket, data.encode("utf-8"))
 
                 response = ""
                 while response.count("\n") < expect:
-                    response += (await self.loop.sock_recv(self.socket, 1024)).decode(
-                        "utf8"
-                    )
-                    logger.info("RECV: %s", response)
-                    logger.info("WAIT %s %s", response.count("\n"), expect)
+                    response += (await self.loop.sock_recv(self.socket, 1024)).decode("utf8")
+                    logger.debug("RECV %d: %s", len(response), response)
+                    logger.debug("WAIT %s %s", response.count("\n"), expect)
 
             return response
         except Exception as exc:
@@ -120,13 +116,8 @@ class SpaNet:
             "password": encrypted_password,
         }
 
-        login_response = await self.session.post(
-            "https://api.spanet.net.au/api/MemberLogin", data=login_params
-        )
-        if (
-            login_response.status != 200
-            or (await login_response.json())["success"] is not True
-        ):
+        login_response = await self.session.post("https://api.spanet.net.au/api/MemberLogin", data=login_params)
+        if login_response.status != 200 or (await login_response.json())["success"] is not True:
             raise SpaNetAuthFailed()
 
         session_info = (await login_response.json())["data"]
@@ -136,14 +127,9 @@ class SpaNet:
             "id_session": session_info["id_session"],
         }
 
-        socket_response = await self.session.get(
-            "https://api.spanet.net.au/api/membersockets", params=socket_params
-        )
+        socket_response = await self.session.get("https://api.spanet.net.au/api/membersockets", params=socket_params)
 
-        if (
-            socket_response.status != 200
-            or (await socket_response.json())["success"] is not True
-        ):
+        if socket_response.status != 200 or (await socket_response.json())["success"] is not True:
             raise SpaNetAuthFailed("Failed to get available sockets")
 
         self.spa_configs = (await socket_response.json())["sockets"]
@@ -164,14 +150,10 @@ class SpaNet:
     async def get_spa(self, spa_id):
         """Get the named spa"""
 
-        print("Opening connection to " + spa_id)
+        logger.info("Opening connection to " + spa_id)
 
         spa_config = next(
-            (
-                spa
-                for spa in self.spa_configs
-                if spa["mac_addr"].replace(":", "") == spa_id
-            ),
+            (spa for spa in self.spa_configs if spa["mac_addr"].replace(":", "") == spa_id),
             None,
         )
         if not spa_config:
@@ -180,17 +162,11 @@ class SpaNet:
         loop = asyncio.get_event_loop()
 
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        await loop.sock_connect(
-            sock, (spa_config["spaurl"][:-5], int(spa_config["spaurl"][-4:]))
-        )
+        await loop.sock_connect(sock, (spa_config["spaurl"][:-5], int(spa_config["spaurl"][-4:])))
         await loop.sock_sendall(
             sock,
             bytes(
-                "<connect--"
-                + str(spa_config["id_sockets"])
-                + "--"
-                + str(spa_config["id_member"])
-                + ">",
+                "<connect--" + str(spa_config["id_sockets"]) + "--" + str(spa_config["id_member"]) + ">",
                 "utf-8",
             ),
         )
