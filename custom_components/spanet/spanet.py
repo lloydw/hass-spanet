@@ -172,7 +172,7 @@ class SpaNet:
         )
 
         data = await loop.sock_recv(sock, 22)
-        if str(data)[2:-1] != "Successfully connected":
-            raise SpaNetConnectFailed()
+        if data.decode("utf8") != "Successfully connected":
+            raise SpaNetConnectFailed(f"Connect to spa {spa_id} failed, result: {data.decode('utf8')}")
 
         return SpaPool(spa_config, loop, sock)
