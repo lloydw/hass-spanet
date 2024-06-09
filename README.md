@@ -1,4 +1,4 @@
-# hass-spanet
+# hass-spanet - NOW SUPPORTING SPANET v2 PROTOCOL
 
 Connect your `SpaNET` Spa to `home-assistant`!
 
