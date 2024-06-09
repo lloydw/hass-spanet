@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import uuid
 from typing import Any
 
 import voluptuous as vol
@@ -19,7 +20,7 @@ _LOGGER = logging.getLogger(__name__)
 # TODO adjust the data schema to the data that you need
 STEP_USER_DATA_SCHEMA = vol.Schema(
     {
-        vol.Required("username"): str,
+        vol.Required("email"): str,
         vol.Required("password"): str,
     }
 )
@@ -33,9 +34,13 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str,
 
     session = aiohttp_client.async_get_clientsession(hass)
     spanet = SpaNet(session)
-
-    await spanet.authenticate(data["username"], data["password"])
-    return {"title": "spanet"}
+    _LOGGER.debug(f"Validate - {data['email']} {data['password']}")
+    try:
+        await spanet.authenticate(data["email"], data["password"], str(uuid.uuid4()))
+    except Exception as e:
+        _LOGGER.info(e)
+        raise
+    return {"title": "spanet setup"}
 
 
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):

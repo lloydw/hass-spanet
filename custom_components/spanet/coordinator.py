@@ -6,7 +6,7 @@ from homeassistant.helpers.update_coordinator import (
     UpdateFailed,
 )
 
-from .spanet import SpaNetConnectionLost
+from .spanet import SpaNetApiError
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -57,7 +57,7 @@ class Coordinator(DataUpdateCoordinator):
             async with async_timeout.timeout(10):
                 return await self.spa.refresh_status()
 
-        except SpaNetConnectionLost as exc:
+        except SpaNetApiError as exc:
             _LOGGER.info('Connection lost')
             self.spa = None
             raise UpdateFailed("Failed updating spanet") from exc

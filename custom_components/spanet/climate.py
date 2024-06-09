@@ -10,7 +10,7 @@ from homeassistant.components.climate import (
 )
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import TEMP_CELSIUS
+from homeassistant.const import UnitOfTemperature
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
@@ -39,9 +39,9 @@ class SpaClimate(SpaEntity, ClimateEntity):
         super().__init__(coordinator, "climate", "Climate")
         self.hass = coordinator.hass
 
-        self._attr_temperature_unit = TEMP_CELSIUS
+        self._attr_temperature_unit = UnitOfTemperature.CELSIUS
         self._attr_hvac_modes = [HVACMode.AUTO]
-        self._attr_hvac_mode = HVACMode.HEAT
+        self._attr_hvac_mode = HVACMode.AUTO
         self._attr_supported_features = ClimateEntityFeature.TARGET_TEMPERATURE
         self._attr_target_temperature_step = 0.2
         self._attr_max_temp = 41.0
@@ -50,7 +50,7 @@ class SpaClimate(SpaEntity, ClimateEntity):
 
     @property
     def hvac_action(self) -> HVACAction | str | None:
-        status = self.coordinator.get_status(SK_HEATER)
+        status = self.coordinator.get_status_numeric(SK_HEATER)
         if status is None:
             return None
         return HVACAction.HEATING if status == 1 else HVACAction.IDLE
@@ -67,3 +67,4 @@ class SpaClimate(SpaEntity, ClimateEntity):
         """Set new target temperature."""
         if self.coordinator.spa is not None:
             await self.coordinator.spa.set_temperature(kwargs["temperature"])
+        await self.coordinator.async_request_refresh()

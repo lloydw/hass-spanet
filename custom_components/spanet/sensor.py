@@ -7,7 +7,7 @@ from homeassistant.components.binary_sensor import (
 )
 from homeassistant.components.sensor import SensorEntity, SensorDeviceClass
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import TEMP_CELSIUS
+from homeassistant.const import UnitOfTemperature
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
@@ -29,10 +29,7 @@ async def async_setup_entry(
             SpaTemperatureSensor(coordinator, "Water Temperature", SK_WATERTEMP),
             SpaTemperatureSensor(coordinator, "Set Temperature", SK_SETTEMP),
             SpaBinarySensor(coordinator, "Heater", SK_HEATER),
-            SpaBinarySensor(coordinator, "Pump 1", SK_PUMP1),
-            SpaBinarySensor(coordinator, "Pump 2", SK_PUMP2),
-            SpaBinarySensor(coordinator, "Cleaning", SK_CLEANING),
-            SpaBinarySensor(coordinator, "Sanitize", SK_SANITIZE),
+            SpaBinarySensor(coordinator, "Sanitise", SK_SANITISE),
             SpaBinarySensor(coordinator, "Sleeping", SK_SLEEPING),
         ]
 
@@ -51,7 +48,7 @@ class SpaSensor(SpaEntity):
 class SpaTemperatureSensor(SpaSensor, SensorEntity):
     """A temp sensor"""
 
-    _attr_native_unit_of_measurement = TEMP_CELSIUS
+    _attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
     _attr_device_class = SensorDeviceClass.TEMPERATURE
 
     @property

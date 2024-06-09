@@ -1,22 +1,20 @@
 """ SpaNet API
 
-Based on https://github.com/BlaT2512/spanet-api/blob/main/spanet.md
+Based on https://github.com/BlaT2512/spanet-api/issues/4
 """
-import socket
-import asyncio
 import logging
+import json
+import jwt
+import time
 
 logger = logging.getLogger(__name__)
 
-SK_SETTEMP = "R6:9"
-SK_WATERTEMP = "R5:16"
-SK_HEATER = "R5:13"
-SK_CLEANING = "R5:12"
-SK_SANITIZE = "R5:17"
-SK_SLEEPING = "R5:11"
-SK_PUMP1 = "R5:19"
-SK_PUMP2 = "R5:20"
-
+BASE_URL = "https://app.spanet.net.au/api"
+SK_SETTEMP = "setTemperature"
+SK_WATERTEMP = "currentTemperature"
+SK_HEATER = "heater"
+SK_SANITISE = "sanitiser"
+SK_SLEEPING = "sleepStatus"
 
 class SpaNetException(Exception):
     """Base SpaNet Exception"""
@@ -30,77 +28,52 @@ class SpaNetPoolUnknown(SpaNetException):
     """SpaPool not found"""
 
 
-class SpaNetConnectFailed(SpaNetException):
+class SpaNetApiError(SpaNetException):
     """SpaPool connection failed"""
-
-
-class SpaNetConnectionLost(SpaNetException):
-    """SpaPool connection failed"""
+    def __init__(self, response, body):
+        self.response = response
+        super().__init__(f"API Error {response.status}: {body}")
 
 
 class SpaPool:
-    def __init__(self, config, loop, sock):
+    def __init__(self, config, client):
         self.config = config
-        self.loop = loop
-        self.socket = sock
-        self.lock = asyncio.Lock()
+        self.client = client
         self.last_status = None
 
     @property
     def id(self):
-        return self.config["mac_addr"].replace(":", "")
+        return self.config["id"]
 
     @property
     def name(self):
         return self.config["name"]
 
     async def set_temperature(self, temp: int):
-        await self.send("W40", str(int(temp * 10)))
+        value = int(temp * 10)
+        res = await self.client.put("/Dashboard/" + self.config["id"], {"temperature": value})
+        self.last_status[SK_SETTEMP] = value
+        logger.debug(f"SET TEMP {value}: {res}\n{self.last_status}")
 
-    def get_status(self, status_key: str):
-        key, index = status_key.split(":")
+    def get_status(self, name: str):
         try:
-            return self.last_status[key][int(index)]
+            return self.last_status[name]
         except (KeyError, IndexError) as exc:
-            logger.error("Failed to load data for status key %s", status_key, exc_info=exc)
+            logger.error("Failed to load data for status key %s", name, exc_info=exc)
             logger.error("Status: %s", self.last_status)
             raise
 
     async def refresh_status(self):
+        dashboard_data = await self.client.get("/Dashboard/" + self.config["id"])
+        info_data = await self.client.get("/Information/" + self.config["id"])
+
         status = {}
-
-        data = await self.send("RF", expect=13)
-        logger.debug("REFRESH GOT %s", data)
-
-        for row in data.split("\r\n"):
-            row_data = row.split(",")
-            if len(row_data) > 2:
-                status[row_data[1]] = row_data
+        status.update(dashboard_data)
+        status.update(info_data.get("information", {}).get("informationStatus", {}))
+        logger.debug(f"Spa {self.config['id']} Status: {status}")
 
         self.last_status = status
         return status
-
-    async def send(self, command, value=None, expect=1):
-        if value:
-            data = f"{command}:{value}\n"
-        else:
-            data = f"{command}\n"
-        try:
-            async with self.lock:
-                logger.debug("SEND: %s", data)
-                await self.loop.sock_sendall(self.socket, data.encode("utf-8"))
-
-                response = ""
-                while response.count("\n") < expect:
-                    response += (await self.loop.sock_recv(self.socket, 1024)).decode("utf8")
-                    logger.debug("RECV %d: %s", len(response), response)
-                    logger.debug("WAIT %s %s", response.count("\n"), expect)
-
-            return response
-        except Exception as exc:
-            logger.error("SpaNet Exception", exc_info=exc)
-            raise SpaNetConnectionLost() from exc
-
 
 class SpaNet:
     def __init__(self, aio_session):
@@ -108,71 +81,111 @@ class SpaNet:
         self.spa_configs = {}
         self.spa_sockets = {}
         self.session_info = None
+        self.client = None
+        self.auth_token = {}
 
-    async def authenticate(self, username, encrypted_password):
+    async def authenticate(self, email, password, device_id):
         login_params = {
-            "login": username,
-            "api_key": "4a483b9a-8f02-4e46-8bfa-0cf5732dbbd5",
-            "password": encrypted_password,
+            "email": email,
+            "password": password,
+            "userDeviceId": device_id,
+            "language": "en_AU"
         }
 
-        login_response = await self.session.post("https://api.spanet.net.au/api/MemberLogin", data=login_params)
-        if login_response.status != 200 or (await login_response.json())["success"] is not True:
-            raise SpaNetAuthFailed()
+        client = HttpClient(self.session)
+        try:
+            login_data = await client.post("/Login/Authenticate", login_params)
+            if "access_token" not in login_data:
+                raise SpaNetAuthFailed()
+        except Exception as e:
+            raise SpaNetAuthFailed(e)
 
-        session_info = (await login_response.json())["data"]
+        self.token_source = TokenSource(client, login_data, device_id)
+        self.client = HttpClient(self.session, self.token_source)
+        device_data = await self.client.get("/Devices")
 
-        socket_params = {
-            "id_member": session_info["id_member"],
-            "id_session": session_info["id_session"],
-        }
-
-        socket_response = await self.session.get("https://api.spanet.net.au/api/membersockets", params=socket_params)
-
-        if socket_response.status != 200 or (await socket_response.json())["success"] is not True:
-            raise SpaNetAuthFailed("Failed to get available sockets")
-
-        self.spa_configs = (await socket_response.json())["sockets"]
+        spa_configs = []
+        for config in device_data["devices"]:
+            spa_configs.append(
+                {
+                    "id": str(config["id"]),
+                    "name": config["name"],
+                    "macAddress": config["macAddress"],
+                }
+            )
+        self.spa_configs = spa_configs
 
     def get_available_spas(self):
         """Get a list of spas"""
-        result = []
-        for config in self.spa_configs:
-            result.append(
-                {
-                    "id": config["mac_addr"].replace(":", ""),
-                    "name": config["name"],
-                    "mac_addr": config["mac_addr"],
-                }
-            )
-        return result
+        return self.spa_configs
 
     async def get_spa(self, spa_id):
         """Get the named spa"""
 
-        logger.info("Opening connection to " + spa_id)
-
         spa_config = next(
-            (spa for spa in self.spa_configs if spa["mac_addr"].replace(":", "") == spa_id),
+            (spa for spa in self.spa_configs if str(spa["id"]) == spa_id),
             None,
         )
         if not spa_config:
             raise SpaNetPoolUnknown()
 
-        loop = asyncio.get_event_loop()
+        return SpaPool(spa_config, self.client)
 
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        await loop.sock_connect(sock, (spa_config["spaurl"][:-5], int(spa_config["spaurl"][-4:])))
-        await loop.sock_sendall(
-            sock,
-            bytes(
-                "<connect--" + str(spa_config["id_sockets"]) + "--" + str(spa_config["id_member"]) + ">",
-                "utf-8",
-            ),
-        )
+class HttpClient:
+    def __init__(self, session, token_source=None):
+        self.session = session
+        self.token_source = token_source
 
-        data = await loop.sock_recv(sock, 22)
-        if data.decode("utf8") != "Successfully connected":
-            raise SpaNetConnectFailed(f"Connect to spa {spa_id} failed, result: {data.decode('utf8')}")
+    async def post(self, path, payload):
+        response = await self.session.post(BASE_URL + path, data=json.dumps(payload), headers=await self.build_headers())
+        return await self.check_response(response)
 
-        return SpaPool(spa_config, loop, sock)
+    async def put(self, path, payload):
+        response = await self.session.put(BASE_URL + path, data=json.dumps(payload), headers=await self.build_headers())
+        return await self.check_response(response)
+
+    async def get(self, path):
+        response = await self.session.get(BASE_URL + path, headers=await self.build_headers())
+        return await self.check_response(response)
+
+    async def build_headers(self):
+        headers = {
+            "User-Agent": "SpaNET/2 CFNetwork/1465.1 Darwin/23.0.0",
+            "Content-Type": "application/json",
+        }
+        if self.token_source != None:
+            headers["Authorization"] = "Bearer " + (await self.token_source.token())
+        return headers
+
+    async def check_response(self, response):
+        if response.status > 299:
+            body = await response.text()
+            raise SpaNetApiError(response, body)
+        if response.headers.get("Content-Type", "").startswith("application/json"):
+            return await response.json()
+        return await response.text()
+
+class TokenSource:
+    def __init__(self, client, token, device_id):
+        self.token_data = {"device_id": device_id}
+        self.client = client
+        self.update(token)
+
+    def update(self, token):
+        decoded = jwt.decode(token["access_token"], options={"verify_signature": False}, algorithms=["HS256"])
+        self.token_data.update(token)
+        self.token_data["expires_at"] = decoded["exp"]
+
+    async def token(self):
+        expire_threshold = int(time.time()) - 60
+        if self.token_data["expires_at"] > expire_threshold:
+            return self.token_data["access_token"]
+
+        response = await self.client.post("/OAuth/Token", {
+            "refreshToken": self.token_data["refresh_token"],
+            "userDeviceId": self.token_data["device_id"]
+        })
+
+        self.update(response)
+        logger.debug(f"Token refreshed {self.token_data}")
+        return self.token_data["access_token"]
