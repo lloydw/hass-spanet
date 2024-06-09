@@ -1,6 +1,6 @@
 # hass-spanet - supports new SpaNET v2 protocol
 
-Connect your `SpaNET` Spa to `home-assistant`!
+Connect your SpaNET Spa to Home Assistant
 
 Provides a climate interface for managing your Spa temperature and number of sensors including heating, cleaning, sanitizing and sleeping.
 
