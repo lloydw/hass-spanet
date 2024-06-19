@@ -4,6 +4,14 @@ Connect your SpaNET Spa to Home Assistant
 
 Provides a climate interface for managing your Spa temperature and number of sensors including heating, cleaning, sanitizing and sleeping.
 
+### Current Progress
+
+ - [x] Sensors
+ - [x] HVAC Control
+ - [x] Pumps
+ - [ ] Operation Mode
+ - [ ] Sleep Timers
+
 ### Tested with Home Assistant 2024.6
 
 # configuration
