@@ -10,11 +10,6 @@ import time
 logger = logging.getLogger(__name__)
 
 BASE_URL = "https://app.spanet.net.au/api"
-SK_SETTEMP = "setTemperature"
-SK_WATERTEMP = "currentTemperature"
-SK_HEATER = "heater"
-SK_SANITISE = "sanitiser"
-SK_SLEEPING = "sleepStatus"
 
 class SpaNetException(Exception):
     """Base SpaNet Exception"""
@@ -39,7 +34,7 @@ class SpaPool:
     def __init__(self, config, client):
         self.config = config
         self.client = client
-        self.last_status = None
+        self.pumps = {}
 
     @property
     def id(self):
@@ -50,30 +45,21 @@ class SpaPool:
         return self.config["name"]
 
     async def set_temperature(self, temp: int):
-        value = int(temp * 10)
-        res = await self.client.put("/Dashboard/" + self.config["id"], {"temperature": value})
-        self.last_status[SK_SETTEMP] = value
-        logger.debug(f"SET TEMP {value}: {res}\n{self.last_status}")
+        return await self.client.put("/Dashboard/" + self.config["id"], {"temperature": temp})
 
-    def get_status(self, name: str):
-        try:
-            return self.last_status[name]
-        except (KeyError, IndexError) as exc:
-            logger.error("Failed to load data for status key %s", name, exc_info=exc)
-            logger.error("Status: %s", self.last_status)
-            raise
+    async def get_dashboard(self):
+        return await self.client.get("/Dashboard/" + self.id)
 
-    async def refresh_status(self):
-        dashboard_data = await self.client.get("/Dashboard/" + self.config["id"])
-        info_data = await self.client.get("/Information/" + self.config["id"])
+    async def get_pumps(self):
+        return await self.client.get("/PumpsAndBlower/Get/" + self.id)
 
-        status = {}
-        status.update(dashboard_data)
-        status.update(info_data.get("information", {}).get("informationStatus", {}))
-        logger.debug(f"Spa {self.config['id']} Status: {status}")
+    async def set_pump(self, pump_id:str, on:bool):
+        return await self.client.put(f"/PumpsAndBlower/SetPump/" + pump_id, {
+            "deviceId": self.id,
+            "modeId": 1 if on else 2,
+            "pumpVariableSpeed": 0
+        })
 
-        self.last_status = status
-        return status
 
 class SpaNet:
     def __init__(self, aio_session):
@@ -146,7 +132,7 @@ class HttpClient:
 
     async def get(self, path):
         response = await self.session.get(BASE_URL + path, headers=await self.build_headers())
-        return await self.check_response(response)
+        return await self.check_response(response, True)
 
     async def build_headers(self):
         headers = {
@@ -157,13 +143,23 @@ class HttpClient:
             headers["Authorization"] = "Bearer " + (await self.token_source.token())
         return headers
 
-    async def check_response(self, response):
+    async def check_response(self, response, requires_json=False):
         if response.status > 299:
-            body = await response.text()
-            raise SpaNetApiError(response, body)
-        if response.headers.get("Content-Type", "").startswith("application/json"):
+            self.raise_api_error(response)
+
+        is_json = response.headers.get("Content-Type", "").startswith("application/json")
+
+        if not is_json and requires_json:
+            self.raise_api_error(response)
+
+        if is_json:
             return await response.json()
+
         return await response.text()
+
+    async def raise_api_error(self, response):
+        body = await response.text()
+        raise SpaNetApiError(response, body)
 
 class TokenSource:
     def __init__(self, client, token, device_id):

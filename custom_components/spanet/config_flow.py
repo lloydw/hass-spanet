@@ -40,7 +40,7 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str,
     except Exception as e:
         _LOGGER.info(e)
         raise
-    return {"title": "spanet setup"}
+    return {"title": "SpaNET"}
 
 
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):

@@ -14,9 +14,8 @@ from homeassistant.const import UnitOfTemperature
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN
+from .const import *
 from .entity import SpaEntity
-from .spanet import SK_SETTEMP, SK_WATERTEMP, SK_HEATER
 
 
 async def async_setup_entry(
@@ -50,21 +49,19 @@ class SpaClimate(SpaEntity, ClimateEntity):
 
     @property
     def hvac_action(self) -> HVACAction | str | None:
-        status = self.coordinator.get_status_numeric(SK_HEATER)
+        status = self.coordinator.get_state_numeric(SK_HEATER)
         if status is None:
             return None
         return HVACAction.HEATING if status == 1 else HVACAction.IDLE
 
     @property
     def current_temperature(self) -> float | None:
-        return self.coordinator.get_status_numeric(SK_WATERTEMP, divisor=10)
+        return self.coordinator.get_state_numeric(SK_WATERTEMP, divisor=10)
 
     @property
     def target_temperature(self) -> float | None:
-        return self.coordinator.get_status_numeric(SK_SETTEMP, divisor=10)
+        return self.coordinator.get_state_numeric(SK_SETTEMP, divisor=10)
 
     async def async_set_temperature(self, **kwargs: Any) -> None:
         """Set new target temperature."""
-        if self.coordinator.spa is not None:
-            await self.coordinator.spa.set_temperature(kwargs["temperature"])
-        await self.coordinator.async_request_refresh()
+        await self.coordinator.set_temperature(int(kwargs["temperature"] * 10))

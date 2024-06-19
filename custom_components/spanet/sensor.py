@@ -12,10 +12,8 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 
-from .const import DOMAIN
+from .const import *
 from .entity import SpaEntity
-from .spanet import *
-
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -32,6 +30,10 @@ async def async_setup_entry(
             SpaBinarySensor(coordinator, "Sanitise", SK_SANITISE),
             SpaBinarySensor(coordinator, "Sleeping", SK_SLEEPING),
         ]
+
+        for k, v in coordinator.get_state(SK_PUMPS).items():
+            if not v["hasSwitch"]:
+                entities.append(SpaBinarySensor(coordinator, f"Pump {k}", f"pumps.{k}.status"))
 
     async_add_entity(entities)
 
@@ -53,7 +55,7 @@ class SpaTemperatureSensor(SpaSensor, SensorEntity):
 
     @property
     def native_value(self):
-        value = self.coordinator.spa.get_status(self._status_id)
+        value = self.coordinator.get_state(self._status_id)
         if not value:
             return None
         return int(value) / 10
@@ -66,7 +68,13 @@ class SpaBinarySensor(SpaSensor, BinarySensorEntity):
 
     @property
     def is_on(self):
-        value = self.coordinator.spa.get_status(self._status_id)
-        if not value:
+        value = self.coordinator.get_state(self._status_id)
+        if value is None:
             return None
+        if value == "on":
+            return True
+        if value == "off":
+            return False
+        if value == "auto":
+            return False
         return int(value) == 1
