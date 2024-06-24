@@ -13,7 +13,7 @@ from .const import DOMAIN, DEVICE_ID
 from .spanet import SpaNet
 from .coordinator import Coordinator
 
-PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.CLIMATE, Platform.SWITCH]
+PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.CLIMATE, Platform.SWITCH, Platform.SELECT]
 
 
 async def async_setup_entry(

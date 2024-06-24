@@ -53,10 +53,23 @@ class SpaPool:
     async def get_pumps(self):
         return await self.client.get("/PumpsAndBlower/Get/" + self.id)
 
-    async def set_pump(self, pump_id:str, on:bool):
+    async def set_pump(self, pump_id:str, state:str):
+        modeId = 0
+        if state == "auto":
+            modeId = 0
+        elif state == "on":
+            modeId = 1
+        elif state == "off":
+            modeId = 2
+        else:
+            modeId = int(state)
+        # elif state == "low":
+        #     modeId = 0
+        # elif state == "high":
+        #     modeId = 0
         return await self.client.put(f"/PumpsAndBlower/SetPump/" + pump_id, {
             "deviceId": self.id,
-            "modeId": 1 if on else 2,
+            "modeId": modeId,
             "pumpVariableSpeed": 0
         })
 
