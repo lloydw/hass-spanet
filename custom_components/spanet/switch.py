@@ -20,8 +20,8 @@ async def async_setup_entry(
 
     for coordinator in hass.data[DOMAIN]["spas"]:
         for k, v in coordinator.get_state(SK_PUMPS).items():
-            if v["hasSwitch"]:
-                entities.append(SpaSwitch(coordinator, f"Pump {k}", f"pumps.{k}.status", k))
+            if v["hasSwitch"] and v["speeds"] == 1:
+                entities.append(SpaSwitch(coordinator, f"Pump {k}", f"pumps.{k}"))
 
     async_add_entity(entities)
 
@@ -31,28 +31,27 @@ class SpaSwitch(SpaEntity, SwitchEntity):
 
     _attr_device_class = SwitchDeviceClass.SWITCH
 
-    def __init__(self, coordinator, name, status_id, switch_id) -> None:
+    def __init__(self, coordinator, name, state_key) -> None:
         super().__init__(coordinator, "switch", name)
         self.hass = coordinator.hass
-        self._status_id = status_id
-        self._switch_id = switch_id
+        self._state_key = state_key
 
     @property
     def is_on(self):
-        value = self.coordinator.get_state(self._status_id)
+        value = self.coordinator.get_state(self._state_key, "state")
         if not value:
             return None
-        if value == "on":
+        if value == "on" or value == "auto":
             return True
         if value == "off":
             return False
         return int(value) == 1
 
     async def async_turn_on(self, **kwargs):
-        await self.coordinator.set_pump(self._switch_id, 1)
+        await self.coordinator.set_pump(self._state_key, "on")
 
     async def async_turn_off(self, **kwargs):
-        await self.coordinator.set_pump(self._switch_id, 0)
+        await self.coordinator.set_pump(self._state_key, "off")
 
     def entity_default_value(self):
         """Return False as the default value for this entity type."""

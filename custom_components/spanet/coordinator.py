@@ -30,9 +30,9 @@ class Coordinator(DataUpdateCoordinator):
         self.scheduler = Scheduler()
 
         dashboard_task = self.scheduler.add_task(120, self.update_dashboard)
-        dashboard_task.trigger()
         self.tasks = [
-            self.scheduler.add_task(300, self.update_pumps)
+            self.scheduler.add_task(300, self.update_pumps),
+            self.scheduler.add_task(1200, self.update_operation_mode)
         ]
 
     @property
@@ -43,9 +43,11 @@ class Coordinator(DataUpdateCoordinator):
     def spa_id(self):
         return self.spa_config["id"]
 
-    def get_state(self, key: str):
+    def get_state(self, key: str, sub_key=None):
         obj = self.state
         path = key.split('.')
+        if sub_key is not None:
+            path.append(sub_key)
         try:
             for p in path:
                 obj = obj[p]
@@ -67,10 +69,22 @@ class Coordinator(DataUpdateCoordinator):
         logger.debug(f"SET TEMP: {temp} -> {self.state}")
         await self.async_request_refresh()
 
-    async def set_pump(self, id: str, on: bool):
-        self.state["pumps"][id]["status"] = "on" if on else "off"
-        await self.spa.set_pump(self.state["pumps"][id]["apiId"], on)
-        logger.debug(f"SET PUMP {id}: {on} -> {self.state}")
+    async def set_pump(self, key: str, state: str):
+        pump = self.get_state(key)
+        pump["state"] = state
+        await self.spa.set_pump(pump["apiId"], state)
+        logger.debug(f"SET PUMP {key}: {state} -> {self.state}")
+        await self.async_request_refresh()
+
+    async def set_operation_mode(self, mode: str):
+        modeIndex = OPERATION_MODES.index(mode)
+        if modeIndex < 0:
+            logger.error(f"Unknown operation mode: {mode}")
+            return
+
+        await self.spa.set_operation_mode(modeIndex)
+        self.state[SK_OPERATION_MODE] = mode
+        logger.debug(f"SET OPERATION MODE: {mode} -> {self.state}")
         await self.async_request_refresh()
 
     async def _async_update_data(self):
@@ -128,8 +142,15 @@ class Coordinator(DataUpdateCoordinator):
             pump = pumps.get(pump_id)
             pump["apiId"] = str(p["id"])
             pump["auto"] = p["hasAuto"]
-            pump["hasSwitch"] = p["canSwitchOn"] and not p["hasAuto"]
-            pump["status"] = p["pumpStatus"]
+            pump["speeds"] = 1 # p["pumpSpeed"] Multiple speeds not supported
+            pump["hasSwitch"] = p["canSwitchOn"] and (not p["hasAuto"] or p["pumpSpeed"] > 1)
+            pump["state"] = p["pumpStatus"]
 
         self.state[SK_PUMPS] = pumps
+
+    async def update_operation_mode(self):
+        operation_mode_data = await self.spa.get_operation_mode()
+        logger.debug(f"Update Operation Mode {operation_mode_data}")
+
+        self.state[SK_OPERATION_MODE] = OPERATION_MODES[int(operation_mode_data)]
 

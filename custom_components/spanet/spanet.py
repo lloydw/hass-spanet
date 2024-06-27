@@ -53,12 +53,26 @@ class SpaPool:
     async def get_pumps(self):
         return await self.client.get("/PumpsAndBlower/Get/" + self.id)
 
-    async def set_pump(self, pump_id:str, on:bool):
+    async def set_pump(self, pump_id:str, state:str):
+        modeId = 0
+        if state == "on":
+            modeId = 1
+        elif state == "off":
+            modeId = 2
+        else:
+            logger.warn(f"Unknown modeId for pump state {state}")
+            return
         return await self.client.put(f"/PumpsAndBlower/SetPump/" + pump_id, {
             "deviceId": self.id,
-            "modeId": 1 if on else 2,
+            "modeId": modeId,
             "pumpVariableSpeed": 0
         })
+
+    async def get_operation_mode(self):
+        return await self.client.get("/Settings/OperationMode/" + self.id)
+
+    async def set_operation_mode(self, mode: int):
+        return await self.client.put("/Settings/OperationMode/" + self.id, { "mode": mode })
 
 
 class SpaNet:

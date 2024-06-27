@@ -33,7 +33,7 @@ async def async_setup_entry(
 
         for k, v in coordinator.get_state(SK_PUMPS).items():
             if not v["hasSwitch"]:
-                entities.append(SpaBinarySensor(coordinator, f"Pump {k}", f"pumps.{k}.status"))
+                entities.append(SpaBinarySensor(coordinator, f"Pump {k}", f"pumps.{k}.state"))
 
     async_add_entity(entities)
 
