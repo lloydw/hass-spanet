@@ -48,10 +48,10 @@ class SpaSwitch(SpaEntity, SwitchEntity):
         return int(value) == 1
 
     async def async_turn_on(self, **kwargs):
-        await self.coordinator.set_pump(self.state_key, "on")
+        await self.coordinator.set_pump(self._state_key, "on")
 
     async def async_turn_off(self, **kwargs):
-        await self.coordinator.set_pump(self.state_key, "off")
+        await self.coordinator.set_pump(self._state_key, "off")
 
     def entity_default_value(self):
         """Return False as the default value for this entity type."""

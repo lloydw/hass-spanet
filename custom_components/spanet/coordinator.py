@@ -31,7 +31,8 @@ class Coordinator(DataUpdateCoordinator):
 
         dashboard_task = self.scheduler.add_task(120, self.update_dashboard)
         self.tasks = [
-            self.scheduler.add_task(300, self.update_pumps)
+            self.scheduler.add_task(300, self.update_pumps),
+            self.scheduler.add_task(1200, self.update_operation_mode)
         ]
 
     @property
@@ -73,6 +74,17 @@ class Coordinator(DataUpdateCoordinator):
         pump["state"] = state
         await self.spa.set_pump(pump["apiId"], state)
         logger.debug(f"SET PUMP {key}: {state} -> {self.state}")
+        await self.async_request_refresh()
+
+    async def set_operation_mode(self, mode: str):
+        modeIndex = OPERATION_MODES.index(mode)
+        if modeIndex < 0:
+            logger.error(f"Unknown operation mode: {mode}")
+            return
+
+        await self.spa.set_operation_mode(modeIndex)
+        self.state[SK_OPERATION_MODE] = mode
+        logger.debug(f"SET OPERATION MODE: {mode} -> {self.state}")
         await self.async_request_refresh()
 
     async def _async_update_data(self):
@@ -130,9 +142,15 @@ class Coordinator(DataUpdateCoordinator):
             pump = pumps.get(pump_id)
             pump["apiId"] = str(p["id"])
             pump["auto"] = p["hasAuto"]
-            pump["speeds"] = p["pumpSpeed"]
+            pump["speeds"] = 1 # p["pumpSpeed"] Multiple speeds not supported
             pump["hasSwitch"] = p["canSwitchOn"] and (not p["hasAuto"] or p["pumpSpeed"] > 1)
             pump["state"] = p["pumpStatus"]
 
         self.state[SK_PUMPS] = pumps
+
+    async def update_operation_mode(self):
+        operation_mode_data = await self.spa.get_operation_mode()
+        logger.debug(f"Update Operation Mode {operation_mode_data}")
+
+        self.state[SK_OPERATION_MODE] = OPERATION_MODES[int(operation_mode_data)]
 
