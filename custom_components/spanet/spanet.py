@@ -44,11 +44,11 @@ class SpaPool:
     def name(self):
         return self.config["name"]
 
-    async def set_temperature(self, temp: int):
-        return await self.client.put("/Dashboard/" + self.config["id"], {"temperature": temp})
-
     async def get_dashboard(self):
         return await self.client.get("/Dashboard/" + self.id)
+
+    async def get_information(self):
+        return await self.client.get("/Information/" + self.id)
 
     async def get_pumps(self):
         return await self.client.get("/PumpsAndBlower/Get/" + self.id)
@@ -68,11 +68,20 @@ class SpaPool:
             "pumpVariableSpeed": 0
         })
 
+    async def set_temperature(self, temp: int):
+        return await self.client.put("/Dashboard/" + self.config["id"], {"temperature": temp})
+
     async def get_operation_mode(self):
         return await self.client.get("/Settings/OperationMode/" + self.id)
 
     async def set_operation_mode(self, mode: int):
         return await self.client.put("/Settings/OperationMode/" + self.id, { "mode": mode })
+
+    async def get_power_save(self):
+        return await self.client.get("/Settings/PowerSave/" + self.id)
+
+    async def set_power_save(self, mode: int):
+        return await self.client.put("/Settings/PowerSave/" + self.id, { "mode": mode })
 
 
 class SpaNet:

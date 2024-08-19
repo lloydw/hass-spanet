@@ -32,7 +32,7 @@ class Coordinator(DataUpdateCoordinator):
         dashboard_task = self.scheduler.add_task(120, self.update_dashboard)
         self.tasks = [
             self.scheduler.add_task(300, self.update_pumps),
-            self.scheduler.add_task(1200, self.update_operation_mode)
+            self.scheduler.add_task(1200, self.update_information),
         ]
 
     @property
@@ -85,6 +85,17 @@ class Coordinator(DataUpdateCoordinator):
         await self.spa.set_operation_mode(modeIndex)
         self.state[SK_OPERATION_MODE] = mode
         logger.debug(f"SET OPERATION MODE: {mode} -> {self.state}")
+        await self.async_request_refresh()
+
+    async def set_power_save(self, mode: str):
+        modeIndex = POWER_SAVE.index(mode)
+        if modeIndex < 0:
+            logger.error(f"Unknown power save: {mode}")
+            return
+
+        await self.spa.set_power_save(modeIndex)
+        self.state[SK_POWER_SAVE] = mode
+        logger.debug(f"SET POWER SAVE: {mode} -> {self.state}")
         await self.async_request_refresh()
 
     async def _async_update_data(self):
@@ -148,9 +159,20 @@ class Coordinator(DataUpdateCoordinator):
 
         self.state[SK_PUMPS] = pumps
 
-    async def update_operation_mode(self):
-        operation_mode_data = await self.spa.get_operation_mode()
-        logger.debug(f"Update Operation Mode {operation_mode_data}")
+    async def update_information(self):
+        information_data = await self.spa.get_information()
+        logger.debug(f"Update Information {information_data}")
 
-        self.state[SK_OPERATION_MODE] = OPERATION_MODES[int(operation_mode_data)]
+        operation_mode = self.fuzzyFind(OPERATION_MODES, information_data['information']['settingsSummary']['operationMode'])
+        self.state[SK_OPERATION_MODE] = operation_mode
+
+        power_save = information_data['information']['settingsSummary']['powersaveTimer']['mode']
+        self.state[SK_POWER_SAVE] = POWER_SAVE[int(power_save)]
+
+    def fuzzyFind(self, modes, mode):
+        for m in modes:
+            if m.lower().startswith(mode.lower()):
+                return m
+        return None
+
 

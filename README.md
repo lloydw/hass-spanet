@@ -10,6 +10,7 @@ Control your SpaNET Spa with Home Assistant
  - [x] HVAC Control
  - [x] Pumps
  - [x] Operation Mode
+ - [x] Power Save
  - [ ] Sleep Timers
 
 ### Tested with Home Assistant 2024.6

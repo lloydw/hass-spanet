@@ -25,7 +25,8 @@ async def async_setup_entry(
 
     for coordinator in hass.data[DOMAIN]["spas"]:
 
-        entities.append(SpaSelect(coordinator, "Operation Mode", "operationMode", OPERATION_MODES[1:], coordinator.set_operation_mode))
+        entities.append(SpaSelect(coordinator, "Operation Mode", SK_OPERATION_MODE, OPERATION_MODES[1:], coordinator.set_operation_mode))
+        entities.append(SpaSelect(coordinator, "Power Save", SK_POWER_SAVE, POWER_SAVE[1:], coordinator.set_power_save))
 
         for k, v in coordinator.get_state(SK_PUMPS).items():
             if v["hasSwitch"] and v["speeds"] > 1:
