@@ -16,5 +16,16 @@
                 }
             }
         }
+   },
+    "options": {
+        "step": {
+            "settings": {
+                "title": "SpaNET Settings",
+                "description": "Changing these settings requires a restart of home assistant",
+                "data": {
+                    "enable_heat_pump": "Enable Heat Pump"
+                }
+            }
+        }
     }
 }

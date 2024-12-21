@@ -11,7 +11,8 @@ Control your SpaNET Spa with Home Assistant
  - [x] Pumps
  - [x] Operation Mode
  - [x] Power Save
- - [ ] Sleep Timers
+ - [x] HeatPump Support (Enable via Configure screen)
+ - [ ] Lights
 
 ### Tested with Home Assistant 2024.6
 

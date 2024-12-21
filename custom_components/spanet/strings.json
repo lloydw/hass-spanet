@@ -3,7 +3,6 @@
     "step": {
       "user": {
         "data": {
-          "host": "[%key:common::config_flow::data::host%]",
           "email": "[%key:common::config_flow::data::email%]",
           "password": "[%key:common::config_flow::data::password%]"
         }
@@ -16,6 +15,16 @@
     },
     "abort": {
       "already_configured": "[%key:common::config_flow::abort::already_configured_device%]"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "SpaNET Settings",
+        "data": {
+          "enable_heat_pump": "Enable Heat Pump"
+        }
+      }
     }
   }
 }

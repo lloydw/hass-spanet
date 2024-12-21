@@ -28,6 +28,9 @@ async def async_setup_entry(
         entities.append(SpaSelect(coordinator, "Operation Mode", SK_OPERATION_MODE, OPERATION_MODES[1:], coordinator.set_operation_mode))
         entities.append(SpaSelect(coordinator, "Power Save", SK_POWER_SAVE, POWER_SAVE[1:], coordinator.set_power_save))
 
+        if config_entry.options.get(OPT_ENABLE_HEAT_PUMP, False):
+            entities.append(SpaSelect(coordinator, "Heat Pump", SK_HEAT_PUMP, HEAT_PUMP, coordinator.set_heat_pump))
+
         for k, v in coordinator.get_state(SK_PUMPS).items():
             if v["hasSwitch"] and v["speeds"] > 1:
                 entities.append(SpaSelect(coordinator, f"Pump {k}", f"pumps.{k}", pumpOptions, coordinator.set_pump))

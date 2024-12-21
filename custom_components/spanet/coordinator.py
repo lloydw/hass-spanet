@@ -70,7 +70,7 @@ class Coordinator(DataUpdateCoordinator):
         await self.async_request_refresh()
 
     async def set_pump(self, key: str, state: str):
-        pump = self.get_state(key)
+        pump = self.get_state(f"pumps.{key}")
         pump["state"] = state
         await self.spa.set_pump(pump["apiId"], state)
         logger.debug(f"SET PUMP {key}: {state} -> {self.state}")
@@ -96,6 +96,23 @@ class Coordinator(DataUpdateCoordinator):
         await self.spa.set_power_save(modeIndex)
         self.state[SK_POWER_SAVE] = mode
         logger.debug(f"SET POWER SAVE: {mode} -> {self.state}")
+        await self.async_request_refresh()
+
+    async def set_heat_pump(self, mode: str):
+        modeIndex = HEAT_PUMP.index(mode)
+        if modeIndex < 0:
+            logger.error(f"Unknown heat pump: {mode}")
+            return
+
+        await self.spa.set_heat_pump(modeIndex)
+        self.state[SK_HEAT_PUMP] = mode
+        logger.debug(f"SET HEAT PUMP: {mode} -> {self.state}")
+        await self.async_request_refresh()
+
+    async def set_element_boost(self, value: str):
+        await self.spa.set_element_boost(1 if value == "on" else 0)
+        self.state[SK_ELEMENT_BOOST] = value
+        logger.debug(f"SET ELEMENT BOOST: {value} -> {self.state}")
         await self.async_request_refresh()
 
     async def _async_update_data(self):
@@ -163,11 +180,17 @@ class Coordinator(DataUpdateCoordinator):
         information_data = await self.spa.get_information()
         logger.debug(f"Update Information {information_data}")
 
-        operation_mode = self.fuzzyFind(OPERATION_MODES, information_data['information']['settingsSummary']['operationMode'])
+        operation_mode = self.fuzzyFind(OPERATION_MODES, information_data["information"]["settingsSummary"]["operationMode"])
         self.state[SK_OPERATION_MODE] = operation_mode
 
-        power_save = information_data['information']['settingsSummary']['powersaveTimer']['mode']
-        self.state[SK_POWER_SAVE] = POWER_SAVE[int(power_save)]
+        power_save = int(information_data["information"]["settingsSummary"]["powersaveTimer"]["mode"])
+        self.state[SK_POWER_SAVE] = POWER_SAVE[power_save]
+
+        heat_pump = int(information_data["information"]["settingsSummary"]["heatPumpMode"])
+        self.state[SK_HEAT_PUMP] = HEAT_PUMP[heat_pump]
+
+        element_boost = information_data["information"]["settingsSummary"]["hpElementBoost"]
+        self.state[SK_ELEMENT_BOOST] = "on" if element_boost == "1" else "off"
 
     def fuzzyFind(self, modes, mode):
         for m in modes:
