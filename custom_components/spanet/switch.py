@@ -10,9 +10,9 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from .const import *
 from .entity import SpaEntity
 
-def pump_wrapper(callback, pump):
+def partial(callback, arg1):
     async def m(*args):
-        return await callback(pump, *args)
+        return await callback(arg1, *args)
 
     return m
 
@@ -26,13 +26,17 @@ async def async_setup_entry(
     for coordinator in hass.data[DOMAIN]["spas"]:
         for k, v in coordinator.get_state(SK_PUMPS).items():
             if v["hasSwitch"] and v["speeds"] == 1:
-                entities.append(SpaSwitch(coordinator, f"Pump {k}", f"pumps.{k}.state", pump_wrapper(coordinator.set_pump, k)))
+                entities.append(SpaSwitch(coordinator, f"Pump {k}", f"{SK_PUMPS}.{k}.state", partial(coordinator.set_pump, k)))
+
+        entities.append(SpaSwitch(coordinator, f"Lights", f"{SK_LIGHTS}.state", coordinator.set_lights))        
+
+        for k, v in coordinator.get_state(SK_SLEEP_TIMERS).items():
+            entities.append(SpaSwitch(coordinator, f"Sleep Timer {k}", f"{SK_SLEEP_TIMERS}.{k}.state", partial(coordinator.set_sleep_timer, k)))
 
         if config_entry.options.get(OPT_ENABLE_HEAT_PUMP, False):
            entities.append(SpaSwitch(coordinator, "Element Boost", SK_ELEMENT_BOOST, coordinator.set_element_boost))
 
     async_add_entity(entities)
-
 
 class SpaSwitch(SpaEntity, SwitchEntity):
     """A switch"""

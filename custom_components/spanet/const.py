@@ -13,6 +13,8 @@ SK_OPERATION_MODE = "operationMode"
 SK_POWER_SAVE = "powerSave"
 SK_HEAT_PUMP = "heatPump"
 SK_ELEMENT_BOOST = "elementBoost"
+SK_SLEEP_TIMERS = "sleepTimers"
+SK_LIGHTS = "lights"
 
 SL_HEATING = "Heating"
 SL_SLEEPING = "Sleeping"

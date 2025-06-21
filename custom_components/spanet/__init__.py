@@ -39,7 +39,7 @@ async def async_setup_entry(
         hass.data[DOMAIN][DEVICE_ID]
     )
     for spa in spanet.get_available_spas():
-        coordinator = Coordinator(hass, spanet, spa)
+        coordinator = Coordinator(hass, spanet, spa, config_entry)
         await coordinator.async_request_refresh()
 
         device_registry = dr.async_get(hass)

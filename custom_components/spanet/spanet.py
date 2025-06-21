@@ -83,11 +83,23 @@ class SpaPool:
     async def set_power_save(self, mode: int):
         return await self.client.put("/Settings/PowerSave/" + self.id, { "mode": mode })
 
+    async def get_sleep_timer(self, index:int):
+        return await self.client.get("/SleepTimers/" + self.id)
+
+    async def set_sleep_timer(self, timer_id: int, timer_number: int, enabled: int):
+        return await self.client.put("/SleepTimers/" + str(timer_id), { "deviceId": self.id, "timerNumber": timer_number, "enabled": enabled == 1 })
+
     async def set_heat_pump(self, mode: int):
         return await self.client.put("/Settings/SetHeatPumpMode/" + self.id, { "mode": mode + 1 })
 
     async def set_element_boost(self, on: int):
-        return await self.client.put("/Settings/SetElementBoost/" + self.id, { "svElementBoost": True if on == 1 else False })
+        return await self.client.put("/Settings/SetElementBoost/" + self.id, { "svElementBoost": on == 1 })
+
+    async def get_light_details(self):
+        return await self.client.get("/Lights/GetLightDetails/" + self.id)
+
+    async def set_light_status(self, light_id: int, on: int):
+        return await self.client.put("/Lights/SetLightStatus/" + str(light_id), { "deviceId": self.id, "on": on == 1 })
 
 
 class SpaNet:
