@@ -194,7 +194,10 @@ class HttpClient:
             self.raise_api_error(response)
 
         if is_json:
-            return await response.json()
+            data = await response.json()
+            if isinstance(data, str):
+                logger.warn(f"Request to {response.url} received unexpected json string response: {data}")
+            return data
 
         return await response.text()
 

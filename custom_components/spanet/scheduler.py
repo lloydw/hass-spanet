@@ -1,10 +1,15 @@
 import time
+import logging
+import traceback
+
+logger = logging.getLogger(__name__)
 
 class Task:
     def __init__(self, interval: int, callback):
         self.interval = interval
         self.callback = callback
         self.next_tick = 0
+        self.error_count = 0
 
     def trigger(self):
         self.next_tick = 0
@@ -24,5 +29,13 @@ class Scheduler:
         now = int(time.time())
         for task in self.tasks:
             if task.next_tick <= now:
-                await task.callback()
-                task.next_tick = now + task.interval
+                try:
+                    await task.callback()
+                    task.error_count = 0
+                except Exception as e:
+                    task.error_count = task.error_count + 1
+                    logger.Error(f"Error #{task.error_count} running task {task.callback.__name__}\n{traceback.format_exc(e)}\n")
+
+                # If the error count is 1, we're going to try again next tick
+                if task.error_count != 1:
+                    task.next_tick = now + task.interval
