@@ -24,10 +24,16 @@ class SpaNetPoolUnknown(SpaNetException):
 
 
 class SpaNetApiError(SpaNetException):
-    """SpaPool connection failed"""
+    """SpaNet api error"""
     def __init__(self, response, body):
         self.response = response
         super().__init__(f"API Error {response.status}: {body}")
+
+class SpaNetResponseError(SpaNetException):
+    """SpaNet response error"""
+    def __init__(self, response, message):
+        self.response = response
+        super().__init__(message)
 
 
 class SpaPool:
@@ -186,17 +192,17 @@ class HttpClient:
 
     async def check_response(self, response, requires_json=False):
         if response.status > 299:
-            self.raise_api_error(response)
+            await self.raise_api_error(response)
 
         is_json = response.headers.get("Content-Type", "").startswith("application/json")
 
         if not is_json and requires_json:
-            self.raise_api_error(response)
+            await self.raise_api_error(response)
 
         if is_json:
             data = await response.json()
-            if isinstance(data, str):
-                logger.warn(f"Request to {response.url} received unexpected json string response: {data}")
+            if not isinstance(data, dict):
+                raise SpaNetResponseError(f"Request to {response.url} received unexpected {type(data).__name__} response: {data}")
             return data
 
         return await response.text()

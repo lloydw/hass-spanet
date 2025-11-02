@@ -11,8 +11,8 @@ class Task:
         self.next_tick = 0
         self.error_count = 0
 
-    def trigger(self):
-        self.next_tick = 0
+    def trigger(self, delay=None):
+        self.next_tick = (int(time.time()) + delay) if delay != None else 0
 
 
 class Scheduler:
@@ -34,7 +34,7 @@ class Scheduler:
                     task.error_count = 0
                 except Exception as e:
                     task.error_count = task.error_count + 1
-                    logger.Error(f"Error #{task.error_count} running task {task.callback.__name__}\n{traceback.format_exc(e)}\n")
+                    logger.error(f"Error #{task.error_count} running task {task.callback.__name__}\n{traceback.format_exc()}\n")
 
                 # If the error count is 1, we're going to try again next tick
                 if task.error_count != 1:

@@ -30,8 +30,8 @@ class Coordinator(DataUpdateCoordinator):
 
         self.scheduler = Scheduler()
 
-        dashboard_task = self.scheduler.add_task(120, self.update_dashboard)
         self.tasks = [
+            self.scheduler.add_task(120, self.update_dashboard),
             self.scheduler.add_task(300, self.update_pumps),
             self.scheduler.add_task(1200, self.update_information),
             self.scheduler.add_task(1200, self.update_lights)
@@ -44,6 +44,9 @@ class Coordinator(DataUpdateCoordinator):
     @property
     def spa_id(self):
         return self.spa_config["id"]
+
+    def queue_refresh(self):
+        self.tasks[0].trigger(20)
 
     def get_state(self, key: str, sub_key=None):
         obj = self.state
@@ -70,6 +73,7 @@ class Coordinator(DataUpdateCoordinator):
         await self.spa.set_temperature(temp)
         logger.debug(f"SET TEMP: {temp} -> {self.state}")
         await self.async_request_refresh()
+        self.queue_refresh()
 
     async def set_pump(self, key: str, state: str):
         pump = self.get_state(f"{SK_PUMPS}.{key}")
@@ -77,6 +81,7 @@ class Coordinator(DataUpdateCoordinator):
         await self.spa.set_pump(pump["apiId"], state)
         logger.debug(f"SET PUMP {key}: {state} -> {self.state}")
         await self.async_request_refresh()
+        self.queue_refresh()
 
     async def set_lights(self, state: str):
         lights = self.get_state(f"{SK_LIGHTS}")
@@ -84,6 +89,7 @@ class Coordinator(DataUpdateCoordinator):
         await self.spa.set_light_status(lights["apiId"], 1 if state == "on" else 0)
         logger.debug(f"SET LIGHTS: {state} -> {self.state}")
         await self.async_request_refresh()
+        self.queue_refresh()
 
     async def set_operation_mode(self, mode: str):
         modeIndex = OPERATION_MODES.index(mode)
@@ -171,7 +177,7 @@ class Coordinator(DataUpdateCoordinator):
         self.state[SK_SANITISE] = 1 if SL_SANITISE in status_list else 0
 
         if force_refresh:
-            for task in self.tasks:
+            for task in self.tasks[1:]:
                 task.trigger()
 
     async def update_pumps(self):
