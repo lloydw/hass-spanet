@@ -21,7 +21,7 @@ Control your SpaNET Spa with Home Assistant
  - [x] HeatPump Support (Enable via Configure screen)
  - [x] Lights (on/off)
 
-### Tested with Home Assistant 2025.6
+### Tested with Home Assistant 2025.11
 
 # configuration
 
