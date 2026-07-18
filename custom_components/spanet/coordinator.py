@@ -137,6 +137,17 @@ class Coordinator(DataUpdateCoordinator):
         logger.debug(f"SET ELEMENT BOOST: {value} -> {self.state}")
         await self.async_request_refresh()
 
+    async def set_blower_mode(self, mode_id: int, speed: int = 0):
+        # modeId: 1 = off, 2 = variable (speed 1-5), 3 = ramp.
+        blower = self.get_state(SK_BLOWER)
+        await self.spa.set_blower(blower["apiId"], mode_id, speed)
+        blower["status"] = {1: "off", 2: "vari", 3: "ramp"}.get(mode_id, blower.get("status"))
+        if mode_id == 2 and speed:
+            blower["speed"] = speed
+        logger.debug(f"SET BLOWER: mode={mode_id} speed={speed} -> {self.state}")
+        await self.async_request_refresh()
+        self.queue_refresh()
+
     async def _async_update_data(self):
         """Fetch data from API endpoint.
 
@@ -197,6 +208,16 @@ class Coordinator(DataUpdateCoordinator):
             pump["state"] = p["pumpStatus"]
 
         self.state[SK_PUMPS] = pumps
+
+        blower = pump_data.get("pumpAndBlower", {}).get("blower")
+        if blower and blower.get("id") is not None:
+            # blowerStatus is "off", "vari" (variable speed) or "ramp".
+            self.state[SK_BLOWER] = {
+                "apiId": str(blower["id"]),
+                "status": blower.get("blowerStatus", "off"),
+                "speed": blower.get("blowerVariableSpeed", 0),
+                "hasSwitch": blower.get("canSwitchOn", False),
+            }
 
     async def update_information(self):
         information_data = await self.spa.get_information()

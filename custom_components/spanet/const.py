@@ -15,6 +15,7 @@ SK_HEAT_PUMP = "heatPump"
 SK_ELEMENT_BOOST = "elementBoost"
 SK_SLEEP_TIMERS = "sleepTimers"
 SK_LIGHTS = "lights"
+SK_BLOWER = "blower"
 
 SL_HEATING = "Heating"
 SL_SLEEPING = "Sleeping"
