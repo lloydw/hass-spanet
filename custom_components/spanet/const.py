@@ -45,3 +45,20 @@ BLOWER_MODE_TO_STATUS = {
     BLOWER_MODE_VARIABLE: BLOWER_STATUS_VARIABLE,
     BLOWER_MODE_RAMP: BLOWER_STATUS_RAMP,
 }
+
+# SpaNet light control (endpoints verified against the SpaNET app).
+# The hardware exposes a fixed named-colour palette; each name is mapped to an
+# RGB point by its position on the colour wheel so HA can snap to the nearest.
+LIGHT_COLOURS = {
+    "white":  (255, 255, 255),
+    "red":    (255, 0, 0),
+    "orange": (255, 128, 0),
+    "lime":   (191, 255, 0),
+    "green":  (0, 255, 0),
+    "teal":   (0, 200, 200),
+    "blue":   (0, 40, 255),
+    "pink":   (255, 0, 200),
+}
+LIGHT_MODES = ["colour", "fade", "step", "party"]
+LIGHT_LEVEL_MIN = 1
+LIGHT_LEVEL_MAX = 5
