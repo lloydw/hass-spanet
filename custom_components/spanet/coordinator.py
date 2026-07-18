@@ -141,8 +141,8 @@ class Coordinator(DataUpdateCoordinator):
         # modeId: 1 = off, 2 = variable (speed 1-5), 3 = ramp.
         blower = self.get_state(SK_BLOWER)
         await self.spa.set_blower(blower["apiId"], mode_id, speed)
-        blower["status"] = {1: "off", 2: "vari", 3: "ramp"}.get(mode_id, blower.get("status"))
-        if mode_id == 2 and speed:
+        blower["status"] = BLOWER_MODE_TO_STATUS.get(mode_id, blower.get("status"))
+        if mode_id == BLOWER_MODE_VARIABLE and speed:
             blower["speed"] = speed
         logger.debug(f"SET BLOWER: mode={mode_id} speed={speed} -> {self.state}")
         await self.async_request_refresh()
@@ -211,10 +211,11 @@ class Coordinator(DataUpdateCoordinator):
 
         blower = pump_data.get("pumpAndBlower", {}).get("blower")
         if blower and blower.get("id") is not None:
-            # blowerStatus is "off", "vari" (variable speed) or "ramp".
+            # blowerStatus is "off", "vari" (variable speed) or "ramp";
+            # coerce a missing/null status to "off" so is_on can't read a phantom on.
             self.state[SK_BLOWER] = {
                 "apiId": str(blower["id"]),
-                "status": blower.get("blowerStatus", "off"),
+                "status": blower.get("blowerStatus") or BLOWER_STATUS_OFF,
                 "speed": blower.get("blowerVariableSpeed", 0),
                 "hasSwitch": blower.get("canSwitchOn", False),
             }
