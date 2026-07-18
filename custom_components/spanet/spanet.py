@@ -66,7 +66,7 @@ class SpaPool:
         elif state == "off":
             modeId = 2
         else:
-            logger.warn(f"Unknown modeId for pump state {state}")
+            logger.warning(f"Unknown modeId for pump state {state}")
             return
         return await self.client.put(f"/PumpsAndBlower/SetPump/" + pump_id, {
             "deviceId": self.id,
