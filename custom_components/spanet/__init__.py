@@ -40,7 +40,11 @@ async def async_setup_entry(
     )
     for spa in spanet.get_available_spas():
         coordinator = Coordinator(hass, spanet, spa, config_entry)
-        await coordinator.async_request_refresh()
+        # Await the first refresh to completion so coordinator.state (pumps,
+        # blower, etc.) is fully populated before the platforms set up their
+        # entities - otherwise entity creation can race the initial fetch and
+        # leave switches (e.g. the blower) orphaned/unavailable.
+        await coordinator.async_config_entry_first_refresh()
 
         device_registry = dr.async_get(hass)
         device = device_registry.async_get_or_create(
