@@ -35,6 +35,12 @@ async def async_setup_entry(
             if v["hasSwitch"] and v["speeds"] > 1:
                 entities.append(SpaSelect(coordinator, f"Pump {k}", f"pumps.{k}", pumpOptions, coordinator.set_pump))
 
+        if SK_FILT_INTERVAL in coordinator.state:
+            entities.append(SpaSelect(coordinator, "Filtration Interval", SK_FILT_INTERVAL,
+                                      FILTRATION_INTERVAL_OPTIONS, coordinator.set_filtration_interval))
+        if SK_LOCK in coordinator.state:
+            entities.append(SpaSelect(coordinator, "Keypad Lock", SK_LOCK, LOCK_MODES, coordinator.set_lock))
+
     async_add_entity(entities)
 
 

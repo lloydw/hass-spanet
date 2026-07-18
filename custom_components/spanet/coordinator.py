@@ -34,7 +34,9 @@ class Coordinator(DataUpdateCoordinator):
             self.scheduler.add_task(120, self.update_dashboard),
             self.scheduler.add_task(300, self.update_pumps),
             self.scheduler.add_task(1200, self.update_information),
-            self.scheduler.add_task(1200, self.update_lights)
+            self.scheduler.add_task(1200, self.update_lights),
+            self.scheduler.add_task(1200, self.update_filtration),
+            self.scheduler.add_task(1200, self.update_settings)
         ]
 
     @property
@@ -147,12 +149,42 @@ class Coordinator(DataUpdateCoordinator):
         logger.debug(f"SET BLOWER: mode={mode_id} speed={speed} -> {self.state}")
         await self.async_request_refresh()
         self.queue_refresh()
-        
+
     async def set_sanitise(self, value: str):
         on = value == "on"
         await self.spa.set_sanitise(on)
         self.state[SK_SANITISE] = 1 if on else 0
         logger.debug(f"SET SANITISE: {value} -> {self.state}")
+        await self.async_request_refresh()
+
+    async def set_filtration_runtime(self, value: int):
+        self.state[SK_FILT_RUNTIME] = int(value)
+        await self.spa.set_filtration("totalRuntime", int(value))
+        logger.debug(f"SET FILTRATION RUNTIME: {value} -> {self.state}")
+        await self.async_request_refresh()
+
+    async def set_filtration_interval(self, value: str):
+        self.state[SK_FILT_INTERVAL] = str(value)
+        await self.spa.set_filtration("inBetweenCycles", int(value))
+        logger.debug(f"SET FILTRATION INTERVAL: {value} -> {self.state}")
+        await self.async_request_refresh()
+
+    async def set_timeout(self, value: int):
+        self.state[SK_TIMEOUT] = int(value)
+        await self.spa.set_timeout(int(value))
+        logger.debug(f"SET TIMEOUT: {value} -> {self.state}")
+        await self.async_request_refresh()
+
+    async def set_lock(self, mode: str):
+        self.state[SK_LOCK] = mode
+        await self.spa.set_lock(LOCK_MODES.index(mode) + 1)
+        logger.debug(f"SET LOCK: {mode} -> {self.state}")
+        await self.async_request_refresh()
+
+    async def set_sanitise_time(self, time_str: str):
+        self.state[SK_SANITISE_TIME] = time_str
+        await self.spa.set_sanitise_time(time_str)
+        logger.debug(f"SET SANITISE TIME: {time_str} -> {self.state}")
         await self.async_request_refresh()
 
     async def _async_update_data(self):
@@ -272,6 +304,29 @@ class Coordinator(DataUpdateCoordinator):
             "apiId": light_details.get('lightId'),
             "state": "on" if light_details.get('lightOn') else "off"
         }
+
+    async def update_filtration(self):
+        data = await self.spa.get_filtration()
+        logger.debug(f"Update Filtration {data}")
+        self.state[SK_FILT_RUNTIME] = data.get("totalRuntime")
+        interval = data.get("inBetweenCycles")
+        interval = str(interval) if interval is not None else None
+        # keep the select's option valid (avoids HA "not a valid option" warnings)
+        self.state[SK_FILT_INTERVAL] = interval if interval in FILTRATION_INTERVAL_OPTIONS else None
+
+    async def update_settings(self):
+        data = await self.spa.get_settings_details()
+        logger.debug(f"Update Settings {data}")
+
+        timeout = data.get("timeout")
+        self.state[SK_TIMEOUT] = int(timeout) if str(timeout).isdigit() else None
+
+        # API returns e.g. "OFF"/"PARTIAL"/"FULL"; normalise to the select options.
+        lock = data.get("lockMode")
+        lock = lock.capitalize() if isinstance(lock, str) else None
+        self.state[SK_LOCK] = lock if lock in LOCK_MODES else None
+
+        self.state[SK_SANITISE_TIME] = data.get("sanitiseTime")
 
     def fuzzyFind(self, modes, mode):
         for m in modes:
