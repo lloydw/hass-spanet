@@ -91,6 +91,38 @@ class Coordinator(DataUpdateCoordinator):
         await self.async_request_refresh()
         self.queue_refresh()
 
+    async def set_light_brightness(self, level: int):
+        lights = self.get_state(SK_LIGHTS)
+        lights["brightness"] = level
+        await self.spa.set_light_brightness(lights["apiId"], level)
+        logger.debug(f"SET LIGHT BRIGHTNESS: {level} -> {self.state}")
+        await self.async_request_refresh()
+        self.queue_refresh()
+
+    async def set_light_colour(self, colour: str):
+        lights = self.get_state(SK_LIGHTS)
+        lights["colour"] = colour
+        await self.spa.set_light_colour(lights["apiId"], colour)
+        logger.debug(f"SET LIGHT COLOUR: {colour} -> {self.state}")
+        await self.async_request_refresh()
+        self.queue_refresh()
+
+    async def set_light_mode(self, mode: str):
+        lights = self.get_state(SK_LIGHTS)
+        lights["mode"] = mode
+        await self.spa.set_light_mode(lights["apiId"], mode)
+        logger.debug(f"SET LIGHT MODE: {mode} -> {self.state}")
+        await self.async_request_refresh()
+        self.queue_refresh()
+
+    async def set_light_speed(self, speed: int):
+        lights = self.get_state(SK_LIGHTS)
+        lights["speed"] = speed
+        await self.spa.set_light_speed(lights["apiId"], speed)
+        logger.debug(f"SET LIGHT SPEED: {speed} -> {self.state}")
+        await self.async_request_refresh()
+        self.queue_refresh()
+
     async def set_operation_mode(self, mode: str):
         modeIndex = OPERATION_MODES.index(mode)
         if modeIndex < 0:
@@ -279,7 +311,11 @@ class Coordinator(DataUpdateCoordinator):
         logger.debug(f"Update Lights {light_details}")
         self.state[SK_LIGHTS] = {
             "apiId": light_details.get('lightId'),
-            "state": "on" if light_details.get('lightOn') else "off"
+            "state": "on" if light_details.get('lightOn') else "off",
+            "mode": light_details.get('lightMode'),
+            "colour": light_details.get('lightColour'),
+            "brightness": light_details.get('lightBrightness'),
+            "speed": light_details.get('lightSpeed'),
         }
 
     def fuzzyFind(self, modes, mode):
