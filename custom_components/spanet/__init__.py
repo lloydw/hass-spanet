@@ -61,4 +61,19 @@ async def async_setup_entry(
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    return True
+    """Unload a config entry, cleaning up its platforms and coordinators.
+
+    Previously this was a no-op, so the entry's platforms were never unloaded
+    and its coordinators were left in the shared ``spas`` list. Every reload
+    therefore stacked another set of coordinators that kept polling the SpaNet
+    cloud. Unload the platforms and drop this entry's coordinators/client.
+    """
+    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    if unload_ok:
+        hass.data[DOMAIN]["spas"] = [
+            coordinator
+            for coordinator in hass.data[DOMAIN]["spas"]
+            if coordinator.config_entry.entry_id != entry.entry_id
+        ]
+        hass.data[DOMAIN].pop(entry.entry_id, None)
+    return unload_ok
