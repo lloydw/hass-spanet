@@ -46,6 +46,26 @@ BLOWER_MODE_TO_STATUS = {
     BLOWER_MODE_RAMP: BLOWER_STATUS_RAMP,
 }
 
+# --- settings controls (endpoints verified against the SpaNET app) ---
+SK_FILT_RUNTIME = "filtrationRuntime"
+SK_FILT_INTERVAL = "filtrationInterval"
+SK_TIMEOUT = "timeout"
+SK_LOCK = "lock"
+SK_SANITISE_TIME = "sanitiseTime"
+
+# Filtration total runtime is 1-24 h; "hours between cycles" only accepts
+# divisors of 24, so it's a select rather than a free slider.
+FILTRATION_RUNTIME_MIN = 1
+FILTRATION_RUNTIME_MAX = 24
+FILTRATION_INTERVALS = [1, 2, 3, 4, 6, 8, 12, 24]
+FILTRATION_INTERVAL_OPTIONS = [str(x) for x in FILTRATION_INTERVALS]
+
+# Keypad lock: list index + 1 == the API lockMode value (1=Off, 2=Partial, 3=Full).
+LOCK_MODES = ["Off", "Partial", "Full"]
+
+# Pump/operation auto-off timeout, in minutes.
+TIMEOUT_MIN = 10
+TIMEOUT_MAX = 60
 # SpaNet light control (endpoints verified against the SpaNET app).
 # The hardware exposes a fixed named-colour palette; each name is mapped to an
 # RGB point by its position on the colour wheel so HA can snap to the nearest.

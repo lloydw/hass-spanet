@@ -113,6 +113,25 @@ class SpaPool:
     async def set_element_boost(self, on: int):
         return await self.client.put("/Settings/SetElementBoost/" + self.id, { "svElementBoost": on == 1 })
 
+    async def get_filtration(self):
+        return await self.client.get("/Settings/Filtration/" + self.id)
+
+    async def set_filtration(self, field: str, value: int):
+        # field is "totalRuntime" (hours) or "inBetweenCycles" (hours between cycles)
+        return await self.client.put("/Settings/Filtration/" + self.id, { field: value })
+
+    async def get_settings_details(self):
+        return await self.client.get("/Settings/GetSettingsDetails?deviceId=" + self.id)
+
+    async def set_timeout(self, minutes: int):
+        return await self.client.put("/Settings/Timeout/" + self.id, { "timeout": minutes })
+
+    async def set_lock(self, lock_mode: int):
+        return await self.client.put("/Settings/Lock/" + self.id, { "lockMode": lock_mode })
+
+    async def set_sanitise_time(self, time_str: str):
+        return await self.client.put("/Settings/Sanitise/" + self.id, { "time": time_str })
+
     async def get_light_details(self):
         return await self.client.get("/Lights/GetLightDetails/" + self.id)
 
