@@ -28,7 +28,10 @@ async def async_setup_entry(
             if v["hasSwitch"] and v["speeds"] == 1:
                 entities.append(SpaSwitch(coordinator, f"Pump {k}", f"{SK_PUMPS}.{k}.state", partial(coordinator.set_pump, k)))
 
-        entities.append(SpaSwitch(coordinator, f"Lights", f"{SK_LIGHTS}.state", coordinator.set_lights))        
+        entities.append(SpaSwitch(coordinator, f"Lights", f"{SK_LIGHTS}.state", coordinator.set_lights))
+
+        # One-touch sanitise / clean cycle (on = start the 20-min cycle, off = cancel).
+        entities.append(SpaSwitch(coordinator, "Sanitise", SK_SANITISE, coordinator.set_sanitise))
 
         for k, v in coordinator.get_state(SK_SLEEP_TIMERS).items():
             entities.append(SpaSwitch(coordinator, f"Sleep Timer {k}", f"{SK_SLEEP_TIMERS}.{k}.state", partial(coordinator.set_sleep_timer, k)))
@@ -52,7 +55,7 @@ class SpaSwitch(SpaEntity, SwitchEntity):
     @property
     def is_on(self):
         value = self.coordinator.get_state(self._state_key)
-        if not value:
+        if value is None or value == "":
             return None
         if value == "on" or value == "auto":
             return True

@@ -147,6 +147,13 @@ class Coordinator(DataUpdateCoordinator):
         logger.debug(f"SET BLOWER: mode={mode_id} speed={speed} -> {self.state}")
         await self.async_request_refresh()
         self.queue_refresh()
+        
+    async def set_sanitise(self, value: str):
+        on = value == "on"
+        await self.spa.set_sanitise(on)
+        self.state[SK_SANITISE] = 1 if on else 0
+        logger.debug(f"SET SANITISE: {value} -> {self.state}")
+        await self.async_request_refresh()
 
     async def _async_update_data(self):
         """Fetch data from API endpoint.
@@ -185,7 +192,9 @@ class Coordinator(DataUpdateCoordinator):
 
         self.state[SK_HEATER] = 1 if SL_HEATING in status_list else 0
         self.state[SK_SLEEPING] = 1 if SL_SLEEPING in status_list else 0
-        self.state[SK_SANITISE] = 1 if SL_SANITISE in status_list else 0
+        # Prefer the explicit sanitiseOn flag (SV controllers report it directly);
+        # fall back to the status list for older/differing feeds (issue #21).
+        self.state[SK_SANITISE] = 1 if dashboard_data.get("sanitiseOn", SL_SANITISE in status_list) else 0
 
         if force_refresh:
             for task in self.tasks[1:]:
@@ -250,7 +259,10 @@ class Coordinator(DataUpdateCoordinator):
             timer = timers.get(timer_id)
             timer['number'] = t["timerNumber"]
             timer["apiId"] = t["id"]
-            timer["state"] = 'on' if t["isEnabled"] else 'off'
+            if 'state' in t: # New format
+                timer['state'] = t['state']
+            elif 'isEnabled' in t:
+                timer["state"] = 'on' if t["isEnabled"] else 'off'
         self.state[SK_SLEEP_TIMERS] = timers
 
     async def update_lights(self):

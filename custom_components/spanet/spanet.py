@@ -85,6 +85,10 @@ class SpaPool:
     async def set_temperature(self, temp: int):
         return await self.client.put("/Dashboard/" + self.config["id"], {"temperature": temp})
 
+    async def set_sanitise(self, on: bool):
+        # Start (True) or cancel (False) the one-touch sanitise / clean cycle.
+        return await self.client.put("/Settings/SanitiseStatus/" + self.id, {"on": on})
+
     async def get_operation_mode(self):
         return await self.client.get("/Settings/OperationMode/" + self.id)
 
