@@ -62,3 +62,7 @@ Each spa exposes the following entities (prefixed with your spa's name):
 The spa light is a full RGB `light` entity — brightness, a colour wheel that snaps to the nearest supported spa colour, and the fade / step / party effect modes with an adjustable speed.
 
 <img width="330" align="center" alt="Light control" src="images/light-control.png">
+
+# shout out to our contributors!
+
+[@montoyenn-spec](https://github.com/montoyenn-spec) - blower, lights, settings, bug fixes
