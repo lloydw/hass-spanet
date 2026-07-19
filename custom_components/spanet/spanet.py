@@ -66,7 +66,7 @@ class SpaPool:
         elif state == "off":
             modeId = 2
         else:
-            logger.warn(f"Unknown modeId for pump state {state}")
+            logger.warning(f"Unknown modeId for pump state {state}")
             return
         return await self.client.put(f"/PumpsAndBlower/SetPump/" + pump_id, {
             "deviceId": self.id,
@@ -74,8 +74,20 @@ class SpaPool:
             "pumpVariableSpeed": 0
         })
 
+    async def set_blower(self, blower_id: str, mode_id: int, speed: int = 0):
+        # SpaNet blower modeId: 1 = off, 2 = variable (speed 1-5), 3 = ramp.
+        return await self.client.put(f"/PumpsAndBlower/SetBlower/" + blower_id, {
+            "deviceId": self.id,
+            "modeId": mode_id,
+            "speed": speed
+        })
+
     async def set_temperature(self, temp: int):
         return await self.client.put("/Dashboard/" + self.config["id"], {"temperature": temp})
+
+    async def set_sanitise(self, on: bool):
+        # Start (True) or cancel (False) the one-touch sanitise / clean cycle.
+        return await self.client.put("/Settings/SanitiseStatus/" + self.id, {"on": on})
 
     async def get_operation_mode(self):
         return await self.client.get("/Settings/OperationMode/" + self.id)
