@@ -8,6 +8,7 @@ SK_WATERTEMP = "currentTemperature"
 SK_HEATER = "heat"
 SK_SANITISE = "sanitise"
 SK_SLEEPING = "sleep"
+SK_FILTERING = "filtering"
 SK_PUMPS = "pumps"
 SK_OPERATION_MODE = "operationMode"
 SK_POWER_SAVE = "powerSave"
@@ -20,6 +21,11 @@ SK_BLOWER = "blower"
 SL_HEATING = "Heating"
 SL_SLEEPING = "Sleeping"
 SL_SANITISE = "Sanitise"
+SL_FILTERING = "Filtering"
+
+# Keys within the dashboard "statusFlags" object
+SF_SANITISE = "SanitiseOn"
+SF_FILTERING = "Filtering"
 
 OPERATION_MODES = ["Unknown", "Normal", "Economy", "Away", "Weekend"]
 POWER_SAVE = ["Unknown", "Off", "Low", "High"]

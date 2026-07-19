@@ -190,11 +190,20 @@ class Coordinator(DataUpdateCoordinator):
 
         self.state["statusList"] = status_list
 
+        # Some spa models (e.g. SVM2/SVMINI2) don't report sanitise or filtration
+        # in statusList, only via the sanitiseOn boolean and statusFlags.
+        status_flags = dashboard_data.get("statusFlags") or {}
+
         self.state[SK_HEATER] = 1 if SL_HEATING in status_list else 0
         self.state[SK_SLEEPING] = 1 if SL_SLEEPING in status_list else 0
-        # Prefer the explicit sanitiseOn flag (SV controllers report it directly);
-        # fall back to the status list for older/differing feeds (issue #21).
-        self.state[SK_SANITISE] = 1 if dashboard_data.get("sanitiseOn", SL_SANITISE in status_list) else 0
+        self.state[SK_SANITISE] = 1 if (
+            dashboard_data.get("sanitiseOn")
+            or status_flags.get(SF_SANITISE)
+            or SL_SANITISE in status_list
+        ) else 0
+        self.state[SK_FILTERING] = 1 if (
+            status_flags.get(SF_FILTERING) or SL_FILTERING in status_list
+        ) else 0
 
         if force_refresh:
             for task in self.tasks[1:]:
