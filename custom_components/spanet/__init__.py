@@ -13,8 +13,7 @@ from .const import DOMAIN, DEVICE_ID
 from .spanet import SpaNet
 from .coordinator import Coordinator
 
-PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.CLIMATE, Platform.SWITCH, Platform.SELECT, Platform.FAN, Platform.NUMBER, Platform.TIME]
-
+PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.CLIMATE, Platform.SWITCH, Platform.SELECT, Platform.FAN, Platform.LIGHT, Platform.NUMBER, Platform.TIME]
 
 async def async_setup_entry(
     hass: HomeAssistant,

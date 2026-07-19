@@ -138,6 +138,18 @@ class SpaPool:
     async def set_light_status(self, light_id: int, on: int):
         return await self.client.put("/Lights/SetLightStatus/" + str(light_id), { "deviceId": self.id, "on": on == 1 })
 
+    async def set_light_brightness(self, light_id: int, brightness: int):
+        return await self.client.put("/Lights/SetLightBrightness/" + str(light_id), { "deviceId": self.id, "brightness": brightness })
+
+    async def set_light_colour(self, light_id: int, colour: str):
+        return await self.client.put("/Lights/SetLightColour/" + str(light_id), { "deviceId": self.id, "colour": colour })
+
+    async def set_light_mode(self, light_id: int, mode: str):
+        return await self.client.put("/Lights/SetLightMode/" + str(light_id), { "deviceId": self.id, "mode": mode })
+
+    async def set_light_speed(self, light_id: int, speed: int):
+        return await self.client.put("/Lights/SetLightSpeed/" + str(light_id), { "deviceId": self.id, "speed": speed })
+
 
 class SpaNet:
     def __init__(self, aio_session):

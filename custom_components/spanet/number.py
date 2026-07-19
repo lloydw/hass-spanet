@@ -1,4 +1,4 @@
-"""SpaNet number entities (filtration runtime, pump timeout)."""
+"""SpaNet number entities."""
 from __future__ import annotations
 
 from homeassistant.components.number import NumberEntity, NumberMode
@@ -27,8 +27,9 @@ async def async_setup_entry(
                 coordinator, "Pump Timeout", SK_TIMEOUT,
                 TIMEOUT_MIN, TIMEOUT_MAX, "min",
                 "mdi:timer-cog-outline", coordinator.set_timeout))
+        if SK_LIGHTS in coordinator.state:
+            entities.append(SpaLightSpeed(coordinator))
     async_add_entity(entities)
-
 
 class SpaNumber(SpaEntity, NumberEntity):
     """A settable integer setting."""
@@ -53,3 +54,24 @@ class SpaNumber(SpaEntity, NumberEntity):
 
     async def async_set_native_value(self, value: float):
         await self._setter(int(value))
+
+
+class SpaLightSpeed(SpaEntity, NumberEntity):
+    """Effect speed for the spa light (fade / step / party modes)."""
+
+    _attr_native_min_value = LIGHT_LEVEL_MIN
+    _attr_native_max_value = LIGHT_LEVEL_MAX
+    _attr_native_step = 1
+    _attr_mode = NumberMode.SLIDER
+    _attr_icon = "mdi:speedometer"
+
+    def __init__(self, coordinator) -> None:
+        super().__init__(coordinator, "number", "Light Speed")
+        self.hass = coordinator.hass
+
+    @property
+    def native_value(self):
+        return self.coordinator.get_state(SK_LIGHTS).get("speed")
+
+    async def async_set_native_value(self, value: float):
+        await self.coordinator.set_light_speed(int(value))

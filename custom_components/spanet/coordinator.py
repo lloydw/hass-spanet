@@ -93,6 +93,38 @@ class Coordinator(DataUpdateCoordinator):
         await self.async_request_refresh()
         self.queue_refresh()
 
+    async def set_light_brightness(self, level: int):
+        lights = self.get_state(SK_LIGHTS)
+        lights["brightness"] = level
+        await self.spa.set_light_brightness(lights["apiId"], level)
+        logger.debug(f"SET LIGHT BRIGHTNESS: {level} -> {self.state}")
+        await self.async_request_refresh()
+        self.queue_refresh()
+
+    async def set_light_colour(self, colour: str):
+        lights = self.get_state(SK_LIGHTS)
+        lights["colour"] = colour
+        await self.spa.set_light_colour(lights["apiId"], colour)
+        logger.debug(f"SET LIGHT COLOUR: {colour} -> {self.state}")
+        await self.async_request_refresh()
+        self.queue_refresh()
+
+    async def set_light_mode(self, mode: str):
+        lights = self.get_state(SK_LIGHTS)
+        lights["mode"] = mode
+        await self.spa.set_light_mode(lights["apiId"], mode)
+        logger.debug(f"SET LIGHT MODE: {mode} -> {self.state}")
+        await self.async_request_refresh()
+        self.queue_refresh()
+
+    async def set_light_speed(self, speed: int):
+        lights = self.get_state(SK_LIGHTS)
+        lights["speed"] = speed
+        await self.spa.set_light_speed(lights["apiId"], speed)
+        logger.debug(f"SET LIGHT SPEED: {speed} -> {self.state}")
+        await self.async_request_refresh()
+        self.queue_refresh()
+
     async def set_operation_mode(self, mode: str):
         modeIndex = OPERATION_MODES.index(mode)
         if modeIndex < 0:
@@ -222,11 +254,20 @@ class Coordinator(DataUpdateCoordinator):
 
         self.state["statusList"] = status_list
 
+        # Some spa models (e.g. SVM2/SVMINI2) don't report sanitise or filtration
+        # in statusList, only via the sanitiseOn boolean and statusFlags.
+        status_flags = dashboard_data.get("statusFlags") or {}
+
         self.state[SK_HEATER] = 1 if SL_HEATING in status_list else 0
         self.state[SK_SLEEPING] = 1 if SL_SLEEPING in status_list else 0
-        # Prefer the explicit sanitiseOn flag (SV controllers report it directly);
-        # fall back to the status list for older/differing feeds (issue #21).
-        self.state[SK_SANITISE] = 1 if dashboard_data.get("sanitiseOn", SL_SANITISE in status_list) else 0
+        self.state[SK_SANITISE] = 1 if (
+            dashboard_data.get("sanitiseOn")
+            or status_flags.get(SF_SANITISE)
+            or SL_SANITISE in status_list
+        ) else 0
+        self.state[SK_FILTERING] = 1 if (
+            status_flags.get(SF_FILTERING) or SL_FILTERING in status_list
+        ) else 0
 
         if force_refresh:
             for task in self.tasks[1:]:
@@ -302,7 +343,11 @@ class Coordinator(DataUpdateCoordinator):
         logger.debug(f"Update Lights {light_details}")
         self.state[SK_LIGHTS] = {
             "apiId": light_details.get('lightId'),
-            "state": "on" if light_details.get('lightOn') else "off"
+            "state": "on" if light_details.get('lightOn') else "off",
+            "mode": light_details.get('lightMode'),
+            "colour": light_details.get('lightColour'),
+            "brightness": light_details.get('lightBrightness'),
+            "speed": light_details.get('lightSpeed'),
         }
 
     async def update_filtration(self):

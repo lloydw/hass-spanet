@@ -8,6 +8,7 @@ SK_WATERTEMP = "currentTemperature"
 SK_HEATER = "heat"
 SK_SANITISE = "sanitise"
 SK_SLEEPING = "sleep"
+SK_FILTERING = "filtering"
 SK_PUMPS = "pumps"
 SK_OPERATION_MODE = "operationMode"
 SK_POWER_SAVE = "powerSave"
@@ -20,6 +21,11 @@ SK_BLOWER = "blower"
 SL_HEATING = "Heating"
 SL_SLEEPING = "Sleeping"
 SL_SANITISE = "Sanitise"
+SL_FILTERING = "Filtering"
+
+# Keys within the dashboard "statusFlags" object
+SF_SANITISE = "SanitiseOn"
+SF_FILTERING = "Filtering"
 
 OPERATION_MODES = ["Unknown", "Normal", "Economy", "Away", "Weekend"]
 POWER_SAVE = ["Unknown", "Off", "Low", "High"]
@@ -60,3 +66,19 @@ LOCK_MODES = ["Off", "Partial", "Full"]
 # Pump/operation auto-off timeout, in minutes.
 TIMEOUT_MIN = 10
 TIMEOUT_MAX = 60
+# SpaNet light control (endpoints verified against the SpaNET app).
+# The hardware exposes a fixed named-colour palette; each name is mapped to an
+# RGB point by its position on the colour wheel so HA can snap to the nearest.
+LIGHT_COLOURS = {
+    "white":  (255, 255, 255),
+    "red":    (255, 0, 0),
+    "orange": (255, 128, 0),
+    "lime":   (191, 255, 0),
+    "green":  (0, 255, 0),
+    "teal":   (0, 200, 200),
+    "blue":   (0, 40, 255),
+    "pink":   (255, 0, 200),
+}
+LIGHT_MODES = ["colour", "fade", "step", "party"]
+LIGHT_LEVEL_MIN = 1
+LIGHT_LEVEL_MAX = 5

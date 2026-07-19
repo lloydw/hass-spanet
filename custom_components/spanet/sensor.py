@@ -29,6 +29,7 @@ async def async_setup_entry(
             SpaBinarySensor(coordinator, "Heater", SK_HEATER),
             SpaBinarySensor(coordinator, "Sanitise", SK_SANITISE),
             SpaBinarySensor(coordinator, "Sleeping", SK_SLEEPING),
+            SpaBinarySensor(coordinator, "Filtering", SK_FILTERING),
         ]
 
         for k, v in coordinator.get_state(SK_PUMPS).items():
