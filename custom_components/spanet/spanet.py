@@ -74,6 +74,14 @@ class SpaPool:
             "pumpVariableSpeed": 0
         })
 
+    async def set_blower(self, blower_id: str, mode_id: int, speed: int = 0):
+        # SpaNet blower modeId: 1 = off, 2 = variable (speed 1-5), 3 = ramp.
+        return await self.client.put(f"/PumpsAndBlower/SetBlower/" + blower_id, {
+            "deviceId": self.id,
+            "modeId": mode_id,
+            "speed": speed
+        })
+
     async def set_temperature(self, temp: int):
         return await self.client.put("/Dashboard/" + self.config["id"], {"temperature": temp})
 
