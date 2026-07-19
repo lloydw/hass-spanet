@@ -228,7 +228,10 @@ class Coordinator(DataUpdateCoordinator):
             timer = timers.get(timer_id)
             timer['number'] = t["timerNumber"]
             timer["apiId"] = t["id"]
-            timer["state"] = 'on' if t["isEnabled"] else 'off'
+            if 'state' in t: # New format
+                timer['state'] = t['state']
+            elif 'isEnabled' in t:
+                timer["state"] = 'on' if t["isEnabled"] else 'off'
         self.state[SK_SLEEP_TIMERS] = timers
 
     async def update_lights(self):

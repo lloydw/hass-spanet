@@ -11,7 +11,6 @@ class SpaEntity(CoordinatorEntity):
         super().__init__(coordinator)
         self.hass = coordinator.hass
 
-        self.entity_id = f"{entity_type}.{self._build_entity_id(coordinator.spa_name.lower() + '_' + name)}"
         self._attr_unique_id = (
             f"{entity_type}.{self._build_entity_id(coordinator.spa_id + '_' + name)}"
         )
