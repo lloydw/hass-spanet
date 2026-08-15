@@ -324,18 +324,19 @@ class Coordinator(DataUpdateCoordinator):
             self.state[SK_HEAT_PUMP] = 'Off'
             self.state[SK_ELEMENT_BOOST] = "off"
 
+
+        timer_data = await self.spa.get_sleep_timers()
+        logger.debug(f"Update Timers {timer_data}")
+
         timers = {}
-        for t in settingsSummary.get("sleepTimers", []):
+        for t in timer_data:
             timer_id = str(t["timerNumber"])
             if not timer_id in timers:
                 timers[timer_id] = {}
             timer = timers.get(timer_id)
             timer['number'] = t["timerNumber"]
             timer["apiId"] = t["id"]
-            if 'state' in t: # New format
-                timer['state'] = t['state']
-            elif 'isEnabled' in t:
-                timer["state"] = 'on' if t["isEnabled"] else 'off'
+            timer["state"] = 'on' if t["isEnabled"] else 'off'
         self.state[SK_SLEEP_TIMERS] = timers
 
     async def update_lights(self):

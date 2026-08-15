@@ -101,7 +101,7 @@ class SpaPool:
     async def set_power_save(self, mode: int):
         return await self.client.put("/Settings/PowerSave/" + self.id, { "mode": mode })
 
-    async def get_sleep_timer(self, index:int):
+    async def get_sleep_timers(self):
         return await self.client.get("/SleepTimers/" + self.id)
 
     async def set_sleep_timer(self, timer_id: int, timer_number: int, enabled: int):
@@ -244,8 +244,8 @@ class HttpClient:
 
         if is_json:
             data = await response.json()
-            if not isinstance(data, dict):
-                raise SpaNetResponseError(f"Request to {response.url} received unexpected {type(data).__name__} response: {data}")
+            if not isinstance(data, dict) and not isinstance(data, list):
+                raise SpaNetResponseError(response, f"Request to {response.url} received unexpected {type(data).__name__} response: {data}")
             return data
 
         return await response.text()
