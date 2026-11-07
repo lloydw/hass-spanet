@@ -10,6 +10,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import *
 from .entity import SpaEntity
+from .pump_modes import has_mode_control
 
 import logging
 logger = logging.getLogger(__name__)
@@ -39,7 +40,7 @@ async def async_setup_entry(
         # read-only until the user explicitly enables the experimental control.
         if ENABLE_EXPERIMENTAL_V2_PUMP_SELECT:
             for k, v in coordinator.get_state(SK_PUMPS).items():
-                if v["hasSwitch"] and v["speeds"] == 2:
+                if has_mode_control(v):
                     entities.append(SpaPumpModeSelect(coordinator, k, v["auto"]))
 
         if SK_FILT_INTERVAL in coordinator.state:
