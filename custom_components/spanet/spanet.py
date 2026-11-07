@@ -179,8 +179,14 @@ class SpaNet:
             login_data = await client.post("/Login/Authenticate", login_params)
             if "access_token" not in login_data:
                 raise SpaNetAuthFailed()
-        except Exception as e:
-            raise SpaNetAuthFailed(e)
+        except SpaNetApiError as exc:
+            # An HTTP 202 or server outage is a temporary cloud failure,
+            # not proof that the user's credentials are incorrect.
+            if exc.response.status == 202 or exc.response.status >= 500:
+                raise
+            raise SpaNetAuthFailed(exc) from exc
+        except Exception as exc:
+            raise SpaNetAuthFailed(exc) from exc
 
         self.token_source = TokenSource(client, login_data, device_id)
         self.client = HttpClient(self.session, self.token_source)
