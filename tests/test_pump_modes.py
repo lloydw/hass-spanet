@@ -56,7 +56,7 @@ class PumpStateTests(unittest.TestCase):
             with self.subTest(raw=raw):
                 self.assertIsNone(modes.switch_on_from_status(raw))
 
-    def test_experimental_selector_is_disabled_by_default(self):
+    def test_experimental_selector_enabled_in_supervised_test_branch(self):
         tree = ast.parse((COMPONENT / "select.py").read_text(encoding="utf-8"))
         assignments = [
             node for node in tree.body
@@ -67,7 +67,7 @@ class PumpStateTests(unittest.TestCase):
         ]
         self.assertEqual(len(assignments), 1)
         self.assertIsInstance(assignments[0].value, ast.Constant)
-        self.assertIs(assignments[0].value.value, False)
+        self.assertIs(assignments[0].value.value, True)
 
 
 class FakeClient:
