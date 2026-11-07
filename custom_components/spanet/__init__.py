@@ -5,12 +5,13 @@ import uuid
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.const import Platform
 from homeassistant.helpers import aiohttp_client
 from homeassistant.helpers import device_registry as dr
 
 from .const import DOMAIN, DEVICE_ID
-from .spanet import SpaNet
+from .spanet import SpaNet, SpaNetApiError
 from .coordinator import Coordinator
 
 PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.CLIMATE, Platform.SWITCH, Platform.SELECT, Platform.FAN, Platform.LIGHT, Platform.NUMBER, Platform.TIME]
@@ -32,11 +33,20 @@ async def async_setup_entry(
         hass.data[DOMAIN][config_entry.entry_id] = spanet
         return True
 
-    await spanet.authenticate(
-        config_entry.data["email"],
-        config_entry.data["password"],
-        hass.data[DOMAIN][DEVICE_ID]
-    )
+    try:
+        await spanet.authenticate(
+            config_entry.data["email"],
+            config_entry.data["password"],
+            hass.data[DOMAIN][DEVICE_ID]
+        )
+    except SpaNetApiError as exc:
+        # Authentication/device-list HTTP 202 is a temporary service failure.
+        # Let Home Assistant retry rather than treating it as bad credentials.
+        if exc.response.status == 202 or exc.response.status >= 500:
+            raise ConfigEntryNotReady(
+                f"SpaNET cloud unavailable (HTTP {exc.response.status})"
+            ) from exc
+        raise
     # Build an entire ready snapshot before publishing any coordinator.
     # When an API endpoint returns transient 202, first_refresh raises
     # ConfigEntryNotReady and HA retries setup automatically. Keeping the
