@@ -64,9 +64,9 @@ jobs:
           from custom_components.spanet import (
               coordinator, sensor, select, switch, spanet, pump_modes,
           )
-          assert select.ENABLE_EXPERIMENTAL_V2_PUMP_SELECT is False
+          assert select.ENABLE_EXPERIMENTAL_V2_PUMP_SELECT is True
           print("PASS: All modified SpaNET modules imported in Home Assistant")
-          print("PASS: Experimental two-speed selector disabled by default")
+          print("PASS: Experimental two-speed selector enabled for supervised test branch")
           '
 
   hassfest:
