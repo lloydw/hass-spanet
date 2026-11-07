@@ -28,8 +28,8 @@ async def async_setup_entry(
 
     session = aiohttp_client.async_get_clientsession(hass)
     spanet = SpaNet(session)
-    hass.data[DOMAIN][config_entry.entry_id] = spanet
     if "email" not in config_entry.data or "password" not in config_entry.data:
+        hass.data[DOMAIN][config_entry.entry_id] = spanet
         return True
 
     await spanet.authenticate(
@@ -37,15 +37,19 @@ async def async_setup_entry(
         config_entry.data["password"],
         hass.data[DOMAIN][DEVICE_ID]
     )
+    # Build an entire ready snapshot before publishing any coordinator.
+    # When an API endpoint returns transient 202, first_refresh raises
+    # ConfigEntryNotReady and HA retries setup automatically. Keeping the
+    # list local prevents a failed multi-spa attempt from leaking partial
+    # coordinators into the global registry.
+    ready_spas = []
     for spa in spanet.get_available_spas():
         coordinator = Coordinator(hass, spanet, spa, config_entry)
-        # Await the first refresh to completion so coordinator.state (pumps,
-        # blower, etc.) is fully populated before the platforms set up their
-        # entities - otherwise entity creation can race the initial fetch and
-        # leave switches (e.g. the blower) orphaned/unavailable.
         await coordinator.async_config_entry_first_refresh()
+        ready_spas.append((spa, coordinator))
 
-        device_registry = dr.async_get(hass)
+    device_registry = dr.async_get(hass)
+    for spa, coordinator in ready_spas:
         device = device_registry.async_get_or_create(
             config_entry_id=config_entry.entry_id,
             connections={(dr.CONNECTION_NETWORK_MAC, spa["macAddress"])},
@@ -56,7 +60,10 @@ async def async_setup_entry(
         )
         coordinator.device = device
 
-        hass.data[DOMAIN]["spas"].append(coordinator)
+    hass.data[DOMAIN][config_entry.entry_id] = spanet
+    hass.data[DOMAIN]["spas"].extend(
+        coordinator for _, coordinator in ready_spas
+    )
 
     await hass.config_entries.async_forward_entry_setups(config_entry, PLATFORMS)
 
