@@ -14,7 +14,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import *
 from .entity import SpaEntity
-from .pump_modes import normalize_pump_mode
+from .pump_modes import normalize_pump_mode, has_mode_sensor
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -34,7 +34,7 @@ async def async_setup_entry(
         ]
 
         for k, v in coordinator.get_state(SK_PUMPS).items():
-            if v["speeds"] > 1:
+            if has_mode_sensor(v):
                 entities.append(SpaPumpModeSensor(coordinator, k))
             if not v["hasSwitch"]:
                 entities.append(SpaBinarySensor(coordinator, f"Pump {k}", f"pumps.{k}.state"))
