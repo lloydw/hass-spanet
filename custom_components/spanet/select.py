@@ -14,8 +14,9 @@ from .entity import SpaEntity
 import logging
 logger = logging.getLogger(__name__)
 
-# Set True only in a supervised test checkout, after making a backup.
-ENABLE_EXPERIMENTAL_V2_PUMP_SELECT = False
+# Stage 2 supervised live test ONLY. Revert to False after testing.
+# This enables a writable selector for confirmed two-speed pumps.
+ENABLE_EXPERIMENTAL_V2_PUMP_SELECT = True
 
 async def async_setup_entry(
     hass: HomeAssistant,
