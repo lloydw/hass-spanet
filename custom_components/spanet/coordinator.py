@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from datetime import timedelta
 import async_timeout
@@ -8,6 +9,8 @@ from homeassistant.helpers.update_coordinator import (
 from .const import *
 from .spanet import SpaNetApiError
 from .scheduler import Scheduler
+from .pump_modes import normalize_pump_mode
+from .pump_readback import readback_until_confirmed
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +30,7 @@ class Coordinator(DataUpdateCoordinator):
         self.config_entry = config_entry
         self.state = {}
         self.spa = None
+        self._pump_readback_task = None
 
         self.scheduler = Scheduler()
 
@@ -97,11 +101,50 @@ class Coordinator(DataUpdateCoordinator):
         # Android SmartLink v2.0.12 pump-mode UI passes pumpVariableSpeed=5.
         # This path is NOT called by the legacy Pump 1 switch, which retains 0.
         await self.spa.set_pump(pump["apiId"], mode, 5)
-        # No optimistic state change; wait for cloud GET before reporting mode.
-        logger.debug("Requested pump %s mode %s; awaiting API readback", key, mode)
-        self.tasks[1].trigger(10)
-        await self.async_request_refresh()
-        self.queue_refresh()
+        # Keep the sensor unmodified until GET confirms the new mode.
+        # A background task avoids waiting for the 60s coordinator tick.
+        # The config entry owns the task and cancels it on unload.
+        old_task = self._pump_readback_task
+        if old_task is not None and not old_task.done():
+            old_task.cancel()
+        logger.debug("Requested pump %s mode %s; scheduling API readback", key, mode)
+        self._pump_readback_task = self.config_entry.async_create_background_task(
+            self.hass,
+            self._async_confirm_pump_mode(key, mode),
+            f"SpaNET {self.spa_name} pump {key} mode readback",
+            eager_start=False,
+        )
+
+    async def _async_confirm_pump_mode(self, key: str, mode: str) -> None:
+        """Check GET after a successful PUT, without changing routine polling."""
+
+        async def fetch_pumps() -> None:
+            # Force only the pump task due; DataUpdateCoordinator serializes
+            # the subsequent refresh with its normal 60s update cycle.
+            self.tasks[1].trigger()
+            await self.async_request_refresh()
+
+        try:
+            confirmed = await readback_until_confirmed(
+                mode,
+                lambda: normalize_pump_mode(
+                    self.get_state(f"{SK_PUMPS}.{key}.state")
+                ),
+                fetch_pumps,
+            )
+            if confirmed:
+                logger.debug("Pump %s API confirmed mode %s", key, mode)
+            else:
+                logger.warning(
+                    "Pump %s requested mode %s was not confirmed by the "
+                    "two bounded API reads; routine polling continues",
+                    key, mode,
+                )
+        except asyncio.CancelledError:
+            raise
+        finally:
+            if self._pump_readback_task is asyncio.current_task():
+                self._pump_readback_task = None
 
     async def set_lights(self, state: str):
         lights = self.get_state(f"{SK_LIGHTS}")
