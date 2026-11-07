@@ -6,6 +6,16 @@ No pump commands are issued here.
 
 PUMP_MODES = ("off", "low", "high", "auto", "on")
 
+def has_mode_sensor(pump):
+    """Only multi-speed pumps receive a dedicated mode sensor."""
+    return pump.get("speeds", 1) > 1
+
+
+def has_mode_control(pump):
+    """Only controllable, exactly two-speed pumps get the mode selector."""
+    return bool(pump.get("hasSwitch")) and pump.get("speeds") == 2
+
+
 
 def normalize_pump_mode(value):
     """Return a recognized cloud-reported pump mode, or None."""
