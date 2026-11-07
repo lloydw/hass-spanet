@@ -11,6 +11,7 @@ from .spanet import SpaNetApiError
 from .scheduler import Scheduler
 from .pump_modes import normalize_pump_mode
 from .pump_readback import readback_until_confirmed
+from .startup import missing_startup_keys
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +32,7 @@ class Coordinator(DataUpdateCoordinator):
         self.state = {}
         self.spa = None
         self._pump_readback_task = None
+        self._initial_state_ready = False
 
         self.scheduler = Scheduler()
 
@@ -298,6 +300,24 @@ class Coordinator(DataUpdateCoordinator):
 
     async def refresh_state(self):
         await self.scheduler.tick()
+        if not self._initial_state_ready:
+            # The scheduler intentionally catches individual API failures.
+            # Without this guard an initial API 202 leaves state={} while
+            # Home Assistant incorrectly treats config entry setup as ready.
+            # UpdateFailed in the first coordinator refresh is converted by
+            # Home Assistant to ConfigEntryNotReady with automatic backoff.
+            missing = missing_startup_keys(
+                self.state,
+                heat_pump_enabled=self.config_entry.options.get(
+                    OPT_ENABLE_HEAT_PUMP, False
+                ),
+            )
+            if missing:
+                raise UpdateFailed(
+                    "SpaNET initial cloud snapshot incomplete "
+                    f"(missing: {', '.join(missing)}); retrying setup"
+                )
+            self._initial_state_ready = True
         logger.debug(f"Spa {self.spa_id} Status: {self.state}")
 
     async def update_dashboard(self):
