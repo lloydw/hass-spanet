@@ -59,20 +59,26 @@ class SpaPool:
     async def get_pumps(self):
         return await self.client.get("/PumpsAndBlower/Get/" + self.id)
 
-    async def set_pump(self, pump_id:str, state:str):
-        modeId = 0
-        if state == "on":
-            modeId = 1
-        elif state == "off":
-            modeId = 2
-        else:
-            logger.warning(f"Unknown modeId for pump state {state}")
-            return
-        return await self.client.put(f"/PumpsAndBlower/SetPump/" + pump_id, {
-            "deviceId": self.id,
-            "modeId": modeId,
-            "pumpVariableSpeed": 0
-        })
+    async def set_pump(self, pump_id: str, state: str, pump_variable_speed: int = 0):
+        """Submit a documented-by-APK mode, without guessing unknown IDs.
+
+        Android SpaNET SmartLink 2.0.12 calls the same SetPump endpoint.
+        The pump button path sends pumpVariableSpeed=5 for two-speed modes.
+        The existing on/off switch behaviour retains speed=0, including on two-speed pumps.
+        """
+        mode_ids = {"on": 1, "off": 2, "auto": 3, "low": 5, "high": 6}
+        if state not in mode_ids:
+            raise ValueError(f"Unsupported SpaNET pump state: {state!r}")
+        if type(pump_variable_speed) is not int or pump_variable_speed < 0:
+            raise ValueError("Invalid SpaNET pumpVariableSpeed")
+        return await self.client.put(
+            "/PumpsAndBlower/SetPump/" + pump_id,
+            {
+                "deviceId": self.id,
+                "modeId": mode_ids[state],
+                "pumpVariableSpeed": pump_variable_speed,
+            },
+        )
 
     async def set_blower(self, blower_id: str, mode_id: int, speed: int = 0):
         # SpaNet blower modeId: 1 = off, 2 = variable (speed 1-5), 3 = ramp.

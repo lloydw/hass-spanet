@@ -14,6 +14,9 @@ from .entity import SpaEntity
 import logging
 logger = logging.getLogger(__name__)
 
+# Set True only in a supervised test checkout, after making a backup.
+ENABLE_EXPERIMENTAL_V2_PUMP_SELECT = False
+
 async def async_setup_entry(
     hass: HomeAssistant,
     config_entry: ConfigEntry,
@@ -31,9 +34,12 @@ async def async_setup_entry(
         if config_entry.options.get(OPT_ENABLE_HEAT_PUMP, False):
             entities.append(SpaSelect(coordinator, "Heat Pump", SK_HEAT_PUMP, HEAT_PUMP, coordinator.set_heat_pump))
 
-        for k, v in coordinator.get_state(SK_PUMPS).items():
-            if v["hasSwitch"] and v["speeds"] > 1:
-                entities.append(SpaSelect(coordinator, f"Pump {k}", f"pumps.{k}", pumpOptions, coordinator.set_pump))
+        # Opt-in ONLY for supervised testing. The installed default remains
+        # read-only until the user explicitly enables the experimental control.
+        if ENABLE_EXPERIMENTAL_V2_PUMP_SELECT:
+            for k, v in coordinator.get_state(SK_PUMPS).items():
+                if v["hasSwitch"] and v["speeds"] == 2:
+                    entities.append(SpaPumpModeSelect(coordinator, k, v["auto"]))
 
         if SK_FILT_INTERVAL in coordinator.state:
             entities.append(SpaSelect(coordinator, "Filtration Interval", SK_FILT_INTERVAL,
@@ -72,3 +78,22 @@ class SpaSelect(SpaEntity, SelectEntity):
             await self._setter(option)
         elif self._setter_num_parameters == 2:
             await self._setter(self._state_key, option)
+
+
+class SpaPumpModeSelect(SpaEntity, SelectEntity):
+    """Explicitly opted-in mode control for a confirmed two-speed pump."""
+
+    def __init__(self, coordinator, pump_number: str, has_auto: bool) -> None:
+        super().__init__(coordinator, "select", f"Pump {pump_number} Mode")
+        self._pump_number = str(pump_number)
+        self._attr_options = ["off"] + (["auto"] if has_auto else []) + ["low", "high"]
+
+    @property
+    def current_option(self):
+        state = self.coordinator.get_state(f"{SK_PUMPS}.{self._pump_number}.state")
+        return state if state in self.options else None
+
+    async def async_select_option(self, option):
+        if option not in self.options:
+            raise ValueError(f"Unsupported pump option: {option!r}")
+        await self.coordinator.set_pump_mode(self._pump_number, option)

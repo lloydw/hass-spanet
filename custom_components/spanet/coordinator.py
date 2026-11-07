@@ -85,6 +85,24 @@ class Coordinator(DataUpdateCoordinator):
         await self.async_request_refresh()
         self.queue_refresh()
 
+    async def set_pump_mode(self, key: str, mode: str):
+        """Experimental mode control; keep legacy switch commands unchanged."""
+        pump = self.get_state(f"{SK_PUMPS}.{key}")
+        if pump.get("speeds") != 2 or not pump.get("hasSwitch"):
+            raise ValueError("Mode selection requires a controllable two-speed pump")
+        if mode not in ("off", "low", "high", "auto"):
+            raise ValueError(f"Unsupported SpaNET pump mode: {mode!r}")
+        if mode == "auto" and not pump.get("auto"):
+            raise ValueError("This pump does not support automatic mode")
+        # Android SmartLink v2.0.12 pump-mode UI passes pumpVariableSpeed=5.
+        # This path is NOT called by the legacy Pump 1 switch, which retains 0.
+        await self.spa.set_pump(pump["apiId"], mode, 5)
+        # No optimistic state change; wait for cloud GET before reporting mode.
+        logger.debug("Requested pump %s mode %s; awaiting API readback", key, mode)
+        self.tasks[1].trigger(10)
+        await self.async_request_refresh()
+        self.queue_refresh()
+
     async def set_lights(self, state: str):
         lights = self.get_state(f"{SK_LIGHTS}")
         lights["state"] = state
@@ -284,9 +302,15 @@ class Coordinator(DataUpdateCoordinator):
                 pumps[pump_id] = {}
             pump = pumps.get(pump_id)
             pump["apiId"] = str(p["id"])
-            pump["auto"] = p["hasAuto"]
-            pump["speeds"] = 1 # p["pumpSpeed"] Multiple speeds not supported
-            pump["hasSwitch"] = p["canSwitchOn"] and (not p["hasAuto"] or p["pumpSpeed"] > 1)
+            pump["auto"] = bool(p.get("hasAuto", False))
+            try:
+                pump["speeds"] = max(1, int(p.get("pumpSpeed", 1)))
+            except (TypeError, ValueError):
+                pump["speeds"] = 1
+            pump["hasSwitch"] = bool(p.get("canSwitchOn")) and (
+                not pump["auto"] or pump["speeds"] > 1
+            )
+            pump["variable_speed"] = p.get("pumpVariableSpeed")
             pump["state"] = p["pumpStatus"]
 
         self.state[SK_PUMPS] = pumps
