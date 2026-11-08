@@ -140,7 +140,7 @@ class SourceIntegrationTests(unittest.TestCase):
     def test_legacy_switch_entity_names_and_send_path_unchanged(self):
         sw = (COMPONENT / "switch.py").read_text(encoding="utf-8")
         co = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
-        self.assertIn('if v["hasSwitch"]:', sw)
+        self.assertIn('if v["hasSwitch"] or coordinator.is_forced_single_speed_switch(k, v):', sw)
         self.assertIn('f"Pump {k}"', sw)
         self.assertIn('await self.spa.set_pump(pump["apiId"], state)', co)
 
