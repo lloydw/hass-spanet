@@ -11,6 +11,11 @@ from .spanet import SpaNetApiError
 from .scheduler import Scheduler
 from .pump_modes import normalize_pump_mode
 from .pump_readback import readback_until_confirmed
+from .pump_options import (
+    configured_mode,
+    user_confirmed_unverified_two_speed,
+    allows_two_speed_control,
+)
 from .startup import missing_startup_keys
 
 logger = logging.getLogger(__name__)
@@ -56,6 +61,17 @@ class Coordinator(DataUpdateCoordinator):
     def queue_refresh(self):
         self.tasks[0].trigger(20)
 
+    def is_pump_mode_control_enabled(self, key: str, pump=None) -> bool:
+        """Resolve per-spa GUI preference; do not change legacy switches."""
+        if pump is None:
+            pump = self.get_state(f"{SK_PUMPS}.{key}")
+        options = self.config_entry.options
+        return allows_two_speed_control(
+            pump,
+            configured_mode(options, self.spa_id, str(key)),
+            user_confirmed_unverified_two_speed(options, self.spa_id, str(key)),
+        )
+
     def get_state(self, key: str, sub_key=None):
         obj = self.state
         path = key.split('.')
@@ -94,8 +110,8 @@ class Coordinator(DataUpdateCoordinator):
     async def set_pump_mode(self, key: str, mode: str):
         """Experimental mode control; keep legacy switch commands unchanged."""
         pump = self.get_state(f"{SK_PUMPS}.{key}")
-        if pump.get("speeds") != 2 or not pump.get("hasSwitch"):
-            raise ValueError("Mode selection requires a controllable two-speed pump")
+        if not self.is_pump_mode_control_enabled(key, pump):
+            raise ValueError("Two-speed control is not enabled for this pump")
         if mode not in ("off", "low", "high", "auto"):
             raise ValueError(f"Unsupported SpaNET pump mode: {mode!r}")
         if mode == "auto" and not pump.get("auto"):
@@ -370,7 +386,9 @@ class Coordinator(DataUpdateCoordinator):
                 pump["speeds"] = max(1, int(p.get("pumpSpeed", 1)))
             except (TypeError, ValueError):
                 pump["speeds"] = 1
-            pump["hasSwitch"] = bool(p.get("canSwitchOn")) and (
+            pump["canSwitchOn"] = bool(p.get("canSwitchOn"))
+            # Keep the existing switch eligibility logic unchanged.
+            pump["hasSwitch"] = pump["canSwitchOn"] and (
                 not pump["auto"] or pump["speeds"] > 1
             )
             pump["variable_speed"] = p.get("pumpVariableSpeed")
