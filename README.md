@@ -50,8 +50,10 @@ pump, including when one account has multiple spas or multiple pumps:
   its existing on/off controls; a verified two-speed pump also gets an
   Off / Auto / Low / High selector (Auto appears only when supported).
 - **Standard On/Off switch only:** Suppresses the additional mode selector.
-  The existing switch is not replaced or renamed. Other pump sensors are
-  preserved.
+  The existing switch is not replaced or renamed. On an API-controllable
+  single-speed pump which previously exposed only a sensor, this explicit
+  override can add a switch without removing its existing sensor.
+  Other pump sensors are preserved.
 - **Two-speed mode controls:** Enables the selector for a confirmed two-speed
   pump. If the API reports a single-speed pump, a separate explicit warning
   and acknowledgement are required, and the hardware must still report a
