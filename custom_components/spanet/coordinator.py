@@ -61,6 +61,18 @@ class Coordinator(DataUpdateCoordinator):
     def queue_refresh(self):
         self.tasks[0].trigger(20)
 
+    def is_forced_single_speed_switch(self, key: str, pump) -> bool:
+        """Add an On/Off switch only on explicit manual single-speed choice.
+
+        Default auto retains upstream switch eligibility exactly unchanged.
+        """
+        from .pump_options import PUMP_CONTROL_SINGLE
+        return (
+            configured_mode(self.config_entry.options, self.spa_id, str(key))
+            == PUMP_CONTROL_SINGLE
+            and bool(pump.get("canSwitchOn"))
+        )
+
     def is_pump_mode_control_enabled(self, key: str, pump=None) -> bool:
         """Resolve per-spa GUI preference; do not change legacy switches."""
         if pump is None:
