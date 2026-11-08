@@ -72,7 +72,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         session = aiohttp_client.async_get_clientsession(hass)
         spanet = SpaNet(session)
-        _LOGGER.debug(f"Validate - {data['email']} {data['password']}")
+        _LOGGER.debug("Validating SpaNET credentials")
         try:
             await spanet.authenticate(data["email"], data["password"], str(uuid.uuid4()))
         except Exception as e:
