@@ -150,6 +150,11 @@ class SourceIntegrationTests(unittest.TestCase):
         self.assertIn('pump["speeds"] = max(1, int(p.get("pumpSpeed", 1)))', co)
         self.assertIn('"reported_speed_count": pump.get("speeds")', se)
 
+    def test_config_flow_does_not_log_plaintext_credentials(self):
+        src = (COMPONENT / "config_flow.py").read_text(encoding="utf-8")
+        self.assertNotIn('Validate - {data[', src)
+        self.assertIn('_LOGGER.debug("Validating SpaNET credentials")', src)
+
     def test_no_pump_command_on_options_save(self):
         cf = (COMPONENT / "config_flow.py").read_text(encoding="utf-8")
         self.assertNotIn(".set_pump(", cf)
