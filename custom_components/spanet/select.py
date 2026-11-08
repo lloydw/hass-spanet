@@ -10,14 +10,9 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import *
 from .entity import SpaEntity
-from .pump_modes import has_mode_control
 
 import logging
 logger = logging.getLogger(__name__)
-
-# Stage 2 supervised live test ONLY. Revert to False after testing.
-# This enables a writable selector for confirmed two-speed pumps.
-ENABLE_EXPERIMENTAL_V2_PUMP_SELECT = True
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -36,12 +31,11 @@ async def async_setup_entry(
         if config_entry.options.get(OPT_ENABLE_HEAT_PUMP, False):
             entities.append(SpaSelect(coordinator, "Heat Pump", SK_HEAT_PUMP, HEAT_PUMP, coordinator.set_heat_pump))
 
-        # Opt-in ONLY for supervised testing. The installed default remains
-        # read-only until the user explicitly enables the experimental control.
-        if ENABLE_EXPERIMENTAL_V2_PUMP_SELECT:
-            for k, v in coordinator.get_state(SK_PUMPS).items():
-                if has_mode_control(v):
-                    entities.append(SpaPumpModeSelect(coordinator, k, v["auto"]))
+        # Each pump uses its saved preference or automatic detection.
+        # No hardcoded flag or global change to existing switch entities.
+        for k, v in coordinator.get_state(SK_PUMPS).items():
+            if coordinator.is_pump_mode_control_enabled(k, v):
+                entities.append(SpaPumpModeSelect(coordinator, k, v["auto"]))
 
         if SK_FILT_INTERVAL in coordinator.state:
             entities.append(SpaSelect(coordinator, "Filtration Interval", SK_FILT_INTERVAL,
