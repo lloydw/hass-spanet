@@ -56,18 +56,11 @@ class PumpStateTests(unittest.TestCase):
             with self.subTest(raw=raw):
                 self.assertIsNone(modes.switch_on_from_status(raw))
 
-    def test_experimental_selector_enabled_in_supervised_test_branch(self):
-        tree = ast.parse((COMPONENT / "select.py").read_text(encoding="utf-8"))
-        assignments = [
-            node for node in tree.body
-            if isinstance(node, ast.Assign)
-            and any(isinstance(target, ast.Name) and
-                    target.id == "ENABLE_EXPERIMENTAL_V2_PUMP_SELECT"
-                    for target in node.targets)
-        ]
-        self.assertEqual(len(assignments), 1)
-        self.assertIsInstance(assignments[0].value, ast.Constant)
-        self.assertIs(assignments[0].value.value, True)
+    def test_selector_is_configured_per_pump_not_hardcoded(self):
+        source = (COMPONENT / "select.py").read_text(encoding="utf-8")
+        self.assertNotIn("ENABLE_EXPERIMENTAL_V2_PUMP_SELECT", source)
+        self.assertIn("coordinator.is_pump_mode_control_enabled(k, v)", source)
+        self.assertIn("SpaPumpModeSelect(", source)
 
 
 class FakeClient:
