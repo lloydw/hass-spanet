@@ -29,7 +29,7 @@ async def async_setup_entry(
             # Stage 1: retain the existing switch (and its entity ID) for
             # multi-speed pumps until the V2 command mapping is verified.
             # The detailed reported mode is available as a read-only sensor.
-            if v["hasSwitch"]:
+            if v["hasSwitch"] or coordinator.is_forced_single_speed_switch(k, v):
                 entities.append(SpaSwitch(coordinator, f"Pump {k}", f"{SK_PUMPS}.{k}.state", partial(coordinator.set_pump, k)))
 
         entities.append(SpaSwitch(coordinator, f"Lights", f"{SK_LIGHTS}.state", coordinator.set_lights))
