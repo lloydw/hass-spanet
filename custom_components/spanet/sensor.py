@@ -34,7 +34,7 @@ async def async_setup_entry(
         ]
 
         for k, v in coordinator.get_state(SK_PUMPS).items():
-            if has_mode_sensor(v):
+            if has_mode_sensor(v) or coordinator.is_pump_mode_control_enabled(k, v):
                 entities.append(SpaPumpModeSensor(coordinator, k))
             if not v["hasSwitch"]:
                 entities.append(SpaBinarySensor(coordinator, f"Pump {k}", f"pumps.{k}.state"))
