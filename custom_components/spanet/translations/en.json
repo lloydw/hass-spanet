@@ -1,31 +1,42 @@
 {
-    "config": {
-        "abort": {
-            "already_configured": "Device is already configured"
-        },
-        "error": {
-            "cannot_connect": "Failed to connect",
-            "invalid_auth": "Invalid authentication",
-            "unknown": "Unexpected error"
-        },
-        "step": {
-            "user": {
-                "data": {
-                    "email": "Email",
-                    "password": "Password"
-                }
-            }
+  "config": {
+    "abort": {
+      "already_configured": "Device is already configured"
+    },
+    "error": {
+      "cannot_connect": "Failed to connect",
+      "invalid_auth": "Invalid authentication",
+      "unknown": "Unexpected error"
+    },
+    "step": {
+      "user": {
+        "data": {
+          "email": "Email",
+          "password": "Password"
         }
-   },
-    "options": {
-        "step": {
-            "settings": {
-                "title": "SpaNET Settings",
-                "description": "Changing these settings requires a restart of home assistant",
-                "data": {
-                    "enable_heat_pump": "Enable Heat Pump"
-                }
-            }
-        }
+      }
     }
+  },
+  "options": {
+    "step": {
+      "settings": {
+        "title": "SpaNET Settings",
+        "description": "Pump type is detected automatically. Choose a mode for each pump only if you want to override the detected controls. Original pump switches and automations are preserved.",
+        "data": {
+          "enable_heat_pump": "Enable Heat Pump"
+        }
+      },
+      "confirm_two_speed": {
+        "title": "Confirm unverified two-speed controls",
+        "description": "SpaNET reports a single-speed pump for: {pumps}. Enabling two-speed commands on unverified hardware may behave unexpectedly or operate the pump incorrectly. Only proceed if you have physically verified the pump supports two speeds and can supervise a test.",
+        "data": {
+          "acknowledge_unverified": "I have verified this hardware supports two-speed operation and accept the risk"
+        }
+      }
+    },
+    "error": {
+      "unsupported_pump": "This controller reports an unsupported or non-controllable pump. Two-speed controls were not enabled.",
+      "confirmation_required": "Please confirm the hardware is two-speed before enabling its controls."
+    }
+  }
 }
