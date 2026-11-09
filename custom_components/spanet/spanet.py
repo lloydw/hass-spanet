@@ -104,8 +104,8 @@ class SpaPool:
     async def get_sleep_timers(self):
         return await self.client.get("/SleepTimers/" + self.id)
 
-    async def set_sleep_timer(self, timer_id: int, timer_number: int, enabled: int):
-        return await self.client.put("/SleepTimers/" + str(timer_id), { "deviceId": self.id, "timerNumber": timer_number, "enabled": enabled == 1 })
+    async def set_sleep_timer(self, timer_id: int, enabled: int):
+        return await self.client.put("/SleepTimers/" + str(timer_id), { "deviceId": self.id, "isEnabled": enabled == 1, "daysHex": "7F" if enabled else "80" })
 
     async def set_heat_pump(self, mode: int):
         return await self.client.put("/Settings/SetHeatPumpMode/" + self.id, { "mode": mode + 1 })

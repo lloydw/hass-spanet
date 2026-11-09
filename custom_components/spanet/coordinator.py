@@ -150,7 +150,7 @@ class Coordinator(DataUpdateCoordinator):
     async def set_sleep_timer(self, key: str, value: str):
         timer = self.get_state(f"{SK_SLEEP_TIMERS}.{key}")
         timer["state"] = value
-        await self.spa.set_sleep_timer(timer["apiId"], timer['number'], value == "on")
+        await self.spa.set_sleep_timer(timer["apiId"], value == "on")
         logger.debug(f"SET SLEEP TIMER {key}: {value} -> {self.state}")
         await self.async_request_refresh()
 
