@@ -118,7 +118,25 @@ class Coordinator(DataUpdateCoordinator):
         self.async_update_listeners()
 
     async def set_pump(self, key: str, state: str):
+        """Preserve legacy switches, but route known two-speed pumps safely.
+
+        On a confirmed two-speed pump with Auto, the legacy "on" command
+        is not a pump mode. Use Auto/Off via the same verified mode path,
+        keeping the original switch entity ID and single-speed semantics.
+        """
         pump = self.get_state(f"{SK_PUMPS}.{key}")
+        if (
+            pump.get("speeds") == 2
+            and pump.get("auto")
+            and self.is_pump_mode_control_enabled(key, pump)
+            and state in ("on", "off")
+        ):
+            mode = "auto" if state == "on" else "off"
+            await self.set_pump_mode(key, mode)
+            return
+
+        # Single-speed, explicitly forced single-speed, and pumps without
+        # Auto retain the original upstream On/Off behaviour and API payload.
         pump["state"] = state
         self.run_background(self.spa.set_pump(pump["apiId"], state))
         logger.debug(f"SET PUMP {key}: {state} -> {self.state}")
