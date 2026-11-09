@@ -1,6 +1,8 @@
-"""Regression check: SpaNET manifest declares the JWT package it imports.
+"""Guard against redeclaring Home Assistant built-in dependencies.
 
-No Home Assistant runtime or cloud API calls are needed.
+Hassfest rejects pyjwt and requests in custom integration requirements
+because Home Assistant already provides these packages. The integration
+can still import jwt from the installed HA runtime.
 """
 from __future__ import annotations
 
@@ -13,11 +15,15 @@ COMPONENT = ROOT / "custom_components" / "spanet"
 
 
 class ManifestDependencyTests(unittest.TestCase):
-    def test_pyjwt_is_declared_for_jwt_import(self):
+    def test_home_assistant_builtin_packages_not_redeclared(self):
         manifest = json.loads((COMPONENT / "manifest.json").read_text(encoding="utf-8"))
+        requirements = [name.lower() for name in manifest["requirements"]]
+        self.assertNotIn("pyjwt", requirements)
+        self.assertNotIn("requests", requirements)
+
+    def test_jwt_import_still_present(self):
         source = (COMPONENT / "spanet.py").read_text(encoding="utf-8")
         self.assertIn("import jwt", source)
-        self.assertIn("pyjwt", [name.lower() for name in manifest["requirements"]])
 
 
 if __name__ == "__main__":
