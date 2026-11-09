@@ -147,7 +147,7 @@ class SingleSpeedCompatibilityTests(unittest.TestCase):
         self.assertIn('if v["hasSwitch"] or coordinator.is_forced_single_speed_switch(k, v):', source)
         coordinator = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
         self.assertIn('self.run_background(self.spa.set_pump(pump["apiId"], state))', coordinator)
-        self.assertIn('self.run_background(self.spa.set_pump(pump["apiId"], mode, 5))', coordinator)
+        self.assertIn('await self.spa.set_pump(api_id, mode, 5)', coordinator)
 
 
 if __name__ == "__main__":
