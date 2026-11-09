@@ -1,4 +1,6 @@
 import asyncio
+from collections.abc import Coroutine
+from typing import Any
 import logging
 from datetime import timedelta
 import async_timeout
@@ -63,7 +65,9 @@ class Coordinator(DataUpdateCoordinator):
         return self.spa_config["id"]
 
     def queue_refresh(self):
-        self.dashboard_task.trigger(20)
+        # Match upstream: on failed API writes, reschedule all existing tasks.
+        for task in self.tasks:
+            task.trigger()
 
     def is_forced_single_speed_switch(self, key: str, pump) -> bool:
         """Add an On/Off switch only on explicit manual single-speed choice.
@@ -110,18 +114,16 @@ class Coordinator(DataUpdateCoordinator):
 
     async def set_temperature(self, temp: int):
         self.state[SK_SETTEMP] = temp
-        await self.spa.set_temperature(temp)
+        self.run_background(self.spa.set_temperature(temp))
         logger.debug(f"SET TEMP: {temp} -> {self.state}")
-        await self.async_request_refresh()
-        self.queue_refresh()
+        self.async_update_listeners()
 
     async def set_pump(self, key: str, state: str):
         pump = self.get_state(f"{SK_PUMPS}.{key}")
         pump["state"] = state
-        await self.spa.set_pump(pump["apiId"], state)
+        self.run_background(self.spa.set_pump(pump["apiId"], state))
         logger.debug(f"SET PUMP {key}: {state} -> {self.state}")
-        await self.async_request_refresh()
-        self.queue_refresh()
+        self.async_update_listeners()
 
     async def set_pump_mode(self, key: str, mode: str):
         """Experimental mode control; keep legacy switch commands unchanged."""
@@ -183,42 +185,37 @@ class Coordinator(DataUpdateCoordinator):
     async def set_lights(self, state: str):
         lights = self.get_state(f"{SK_LIGHTS}")
         lights["state"] = state
-        await self.spa.set_light_status(lights["apiId"], 1 if state == "on" else 0)
+        self.run_background(self.spa.set_light_status(lights["apiId"], 1 if state == "on" else 0))
         logger.debug(f"SET LIGHTS: {state} -> {self.state}")
-        await self.async_request_refresh()
-        self.queue_refresh()
+        self.async_update_listeners()
 
     async def set_light_brightness(self, level: int):
         lights = self.get_state(SK_LIGHTS)
         lights["brightness"] = level
-        await self.spa.set_light_brightness(lights["apiId"], level)
+        self.run_background(self.spa.set_light_brightness(lights["apiId"], level))
         logger.debug(f"SET LIGHT BRIGHTNESS: {level} -> {self.state}")
-        await self.async_request_refresh()
-        self.queue_refresh()
+        self.async_update_listeners()
 
     async def set_light_colour(self, colour: str):
         lights = self.get_state(SK_LIGHTS)
         lights["colour"] = colour
-        await self.spa.set_light_colour(lights["apiId"], colour)
+        self.run_background(self.spa.set_light_colour(lights["apiId"], colour))
         logger.debug(f"SET LIGHT COLOUR: {colour} -> {self.state}")
-        await self.async_request_refresh()
-        self.queue_refresh()
+        self.async_update_listeners()
 
     async def set_light_mode(self, mode: str):
         lights = self.get_state(SK_LIGHTS)
         lights["mode"] = mode
-        await self.spa.set_light_mode(lights["apiId"], mode)
+        self.run_background(self.spa.set_light_mode(lights["apiId"], mode))
         logger.debug(f"SET LIGHT MODE: {mode} -> {self.state}")
-        await self.async_request_refresh()
-        self.queue_refresh()
+        self.async_update_listeners()
 
     async def set_light_speed(self, speed: int):
         lights = self.get_state(SK_LIGHTS)
         lights["speed"] = speed
-        await self.spa.set_light_speed(lights["apiId"], speed)
+        self.run_background(self.spa.set_light_speed(lights["apiId"], speed))
         logger.debug(f"SET LIGHT SPEED: {speed} -> {self.state}")
-        await self.async_request_refresh()
-        self.queue_refresh()
+        self.async_update_listeners()
 
     async def set_operation_mode(self, mode: str):
         modeIndex = OPERATION_MODES.index(mode)
@@ -226,10 +223,10 @@ class Coordinator(DataUpdateCoordinator):
             logger.error(f"Unknown operation mode: {mode}")
             return
 
-        await self.spa.set_operation_mode(modeIndex)
+        self.run_background(self.spa.set_operation_mode(modeIndex))
         self.state[SK_OPERATION_MODE] = mode
         logger.debug(f"SET OPERATION MODE: {mode} -> {self.state}")
-        await self.async_request_refresh()
+        self.async_update_listeners()
 
     async def set_power_save(self, mode: str):
         modeIndex = POWER_SAVE.index(mode)
@@ -237,17 +234,17 @@ class Coordinator(DataUpdateCoordinator):
             logger.error(f"Unknown power save: {mode}")
             return
 
-        await self.spa.set_power_save(modeIndex)
+        self.run_background(self.spa.set_power_save(modeIndex))
         self.state[SK_POWER_SAVE] = mode
         logger.debug(f"SET POWER SAVE: {mode} -> {self.state}")
-        await self.async_request_refresh()
+        self.async_update_listeners()
 
     async def set_sleep_timer(self, key: str, value: str):
         timer = self.get_state(f"{SK_SLEEP_TIMERS}.{key}")
         timer["state"] = value
-        await self.spa.set_sleep_timer(timer["apiId"], timer['number'], value == "on")
+        self.run_background(self.spa.set_sleep_timer(timer["apiId"], value == "on"))
         logger.debug(f"SET SLEEP TIMER {key}: {value} -> {self.state}")
-        await self.async_request_refresh()
+        self.async_update_listeners()
 
     async def set_heat_pump(self, mode: str):
         modeIndex = HEAT_PUMP.index(mode)
@@ -255,64 +252,86 @@ class Coordinator(DataUpdateCoordinator):
             logger.error(f"Unknown heat pump: {mode}")
             return
 
-        await self.spa.set_heat_pump(modeIndex)
+        self.run_background(self.spa.set_heat_pump(modeIndex))
         self.state[SK_HEAT_PUMP] = mode
         logger.debug(f"SET HEAT PUMP: {mode} -> {self.state}")
-        await self.async_request_refresh()
+        self.async_update_listeners()
 
     async def set_element_boost(self, value: str):
-        await self.spa.set_element_boost(1 if value == "on" else 0)
+        self.run_background(self.spa.set_element_boost(1 if value == "on" else 0))
         self.state[SK_ELEMENT_BOOST] = value
         logger.debug(f"SET ELEMENT BOOST: {value} -> {self.state}")
-        await self.async_request_refresh()
+        self.async_update_listeners()
 
     async def set_blower_mode(self, mode_id: int, speed: int = 0):
         # modeId: 1 = off, 2 = variable (speed 1-5), 3 = ramp.
         blower = self.get_state(SK_BLOWER)
-        await self.spa.set_blower(blower["apiId"], mode_id, speed)
+        self.run_background(self.spa.set_blower(blower["apiId"], mode_id, speed))
         blower["status"] = BLOWER_MODE_TO_STATUS.get(mode_id, blower.get("status"))
         if mode_id == BLOWER_MODE_VARIABLE and speed:
             blower["speed"] = speed
         logger.debug(f"SET BLOWER: mode={mode_id} speed={speed} -> {self.state}")
-        await self.async_request_refresh()
-        self.queue_refresh()
+        self.async_update_listeners()
 
     async def set_sanitise(self, value: str):
         on = value == "on"
-        await self.spa.set_sanitise(on)
+        self.run_background(self.spa.set_sanitise(on))
         self.state[SK_SANITISE] = 1 if on else 0
         logger.debug(f"SET SANITISE: {value} -> {self.state}")
-        await self.async_request_refresh()
+        self.async_update_listeners()
 
     async def set_filtration_runtime(self, value: int):
         self.state[SK_FILT_RUNTIME] = int(value)
-        await self.spa.set_filtration("totalRuntime", int(value))
+        self.run_background(self.spa.set_filtration("totalRuntime", int(value)))
         logger.debug(f"SET FILTRATION RUNTIME: {value} -> {self.state}")
-        await self.async_request_refresh()
+        self.async_update_listeners()
 
     async def set_filtration_interval(self, value: str):
         self.state[SK_FILT_INTERVAL] = str(value)
-        await self.spa.set_filtration("inBetweenCycles", int(value))
+        self.run_background(self.spa.set_filtration("inBetweenCycles", int(value)))
         logger.debug(f"SET FILTRATION INTERVAL: {value} -> {self.state}")
-        await self.async_request_refresh()
+        self.async_update_listeners()
 
     async def set_timeout(self, value: int):
         self.state[SK_TIMEOUT] = int(value)
-        await self.spa.set_timeout(int(value))
+        self.run_background(self.spa.set_timeout(int(value)))
         logger.debug(f"SET TIMEOUT: {value} -> {self.state}")
-        await self.async_request_refresh()
+        self.async_update_listeners()
 
     async def set_lock(self, mode: str):
         self.state[SK_LOCK] = mode
-        await self.spa.set_lock(LOCK_MODES.index(mode) + 1)
+        self.run_background(self.spa.set_lock(LOCK_MODES.index(mode) + 1))
         logger.debug(f"SET LOCK: {mode} -> {self.state}")
-        await self.async_request_refresh()
+        self.async_update_listeners()
 
     async def set_sanitise_time(self, time_str: str):
         self.state[SK_SANITISE_TIME] = time_str
-        await self.spa.set_sanitise_time(time_str)
+        self.run_background(self.spa.set_sanitise_time(time_str))
         logger.debug(f"SET SANITISE TIME: {time_str} -> {self.state}")
-        await self.async_request_refresh()
+        self.async_update_listeners()
+
+    def run_background(self, target: Coroutine[Any, Any, Any]) -> None:
+        """Run existing cloud API writes in the background, as upstream does.
+
+        Keep the task attached to this config entry for cleanup on unload.
+        """
+        task_name = getattr(getattr(target, "cr_code", None), "co_name", "api_call")
+
+        async def wrapped_target():
+            try:
+                return await target
+            except Exception:
+                logger.exception("SpaNET background command %s failed", task_name)
+                self.queue_refresh()
+                await self.async_request_refresh()
+                raise
+
+        self.config_entry.async_create_background_task(
+            self.hass,
+            wrapped_target(),
+            f"SpaNET:{task_name}",
+            eager_start=False,
+        )
 
     async def _async_update_data(self):
         """Fetch data from API endpoint.
