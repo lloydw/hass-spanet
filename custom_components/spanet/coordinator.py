@@ -1,4 +1,3 @@
-import asyncio
 from collections.abc import Coroutine
 from typing import Any
 import logging
@@ -11,8 +10,6 @@ from homeassistant.helpers.update_coordinator import (
 from .const import *
 from .spanet import SpaNetApiError
 from .scheduler import Scheduler
-from .pump_modes import normalize_pump_mode
-from .pump_readback import readback_until_confirmed
 from .pump_options import (
     configured_mode,
     user_confirmed_unverified_two_speed,
@@ -38,13 +35,11 @@ class Coordinator(DataUpdateCoordinator):
         self.config_entry = config_entry
         self.state = {}
         self.spa = None
-        self._pump_readback_task = None
         self._initial_state_ready = False
 
         self.scheduler = Scheduler()
 
-        # Keep direct handles to existing scheduler tasks so a pump-mode
-        # readback can request the normal pump refresh, not a second poller.
+        # Retain existing scheduler tasks and normal polling intervals.
         self.dashboard_task = self.scheduler.add_task(120, self.update_dashboard)
         self.pumps_task = self.scheduler.add_task(300, self.update_pumps)
         self.tasks = [
@@ -126,7 +121,13 @@ class Coordinator(DataUpdateCoordinator):
         self.async_update_listeners()
 
     async def set_pump_mode(self, key: str, mode: str):
-        """Experimental mode control; keep legacy switch commands unchanged."""
+        """Control two-speed pump modes with upstream's responsive background writes.
+
+        Unlike the legacy on/off switch (pumpVariableSpeed=0), the SmartLINK
+        two-speed selector needs pumpVariableSpeed=5. The displayed mode is
+        optimistic until the cloud poll updates it; the shared background
+        error handler forces a refresh if the API rejects the command.
+        """
         pump = self.get_state(f"{SK_PUMPS}.{key}")
         if not self.is_pump_mode_control_enabled(key, pump):
             raise ValueError("Two-speed control is not enabled for this pump")
@@ -134,53 +135,13 @@ class Coordinator(DataUpdateCoordinator):
             raise ValueError(f"Unsupported SpaNET pump mode: {mode!r}")
         if mode == "auto" and not pump.get("auto"):
             raise ValueError("This pump does not support automatic mode")
-        # Android SmartLink v2.0.12 pump-mode UI passes pumpVariableSpeed=5.
-        # This path is NOT called by the legacy Pump 1 switch, which retains 0.
-        await self.spa.set_pump(pump["apiId"], mode, 5)
-        # Keep the sensor unmodified until GET confirms the new mode.
-        # A background task avoids waiting for the 60s coordinator tick.
-        # The config entry owns the task and cancels it on unload.
-        old_task = self._pump_readback_task
-        if old_task is not None and not old_task.done():
-            old_task.cancel()
-        logger.debug("Requested pump %s mode %s; scheduling API readback", key, mode)
-        self._pump_readback_task = self.config_entry.async_create_background_task(
-            self.hass,
-            self._async_confirm_pump_mode(key, mode),
-            f"SpaNET {self.spa_name} pump {key} mode readback",
-            eager_start=False,
-        )
 
-    async def _async_confirm_pump_mode(self, key: str, mode: str) -> None:
-        """Check GET after a successful PUT, without changing routine polling."""
-
-        async def fetch_pumps() -> None:
-            # Force only the pump task due; DataUpdateCoordinator serializes
-            # the subsequent refresh with its normal 60s update cycle.
-            self.pumps_task.trigger()
-            await self.async_request_refresh()
-
-        try:
-            confirmed = await readback_until_confirmed(
-                mode,
-                lambda: normalize_pump_mode(
-                    self.get_state(f"{SK_PUMPS}.{key}.state")
-                ),
-                fetch_pumps,
-            )
-            if confirmed:
-                logger.debug("Pump %s API confirmed mode %s", key, mode)
-            else:
-                logger.warning(
-                    "Pump %s requested mode %s was not confirmed by the "
-                    "two bounded API reads; routine polling continues",
-                    key, mode,
-                )
-        except asyncio.CancelledError:
-            raise
-        finally:
-            if self._pump_readback_task is asyncio.current_task():
-                self._pump_readback_task = None
+        # Match upstream's immediate state/listener updates; still use the
+        # SmartLINK Android mode-specific API parameter, not the switch default.
+        pump["state"] = mode
+        self.run_background(self.spa.set_pump(pump["apiId"], mode, 5))
+        logger.debug("SET PUMP %s MODE %s (optimistic) -> %s", key, mode, self.state)
+        self.async_update_listeners()
 
     async def set_lights(self, state: str):
         lights = self.get_state(f"{SK_LIGHTS}")
