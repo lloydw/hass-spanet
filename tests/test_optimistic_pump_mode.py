@@ -37,7 +37,7 @@ async def fast_readback(expected, current, refresh):
 def isolated_coordinator():
     tree = ast.parse(COORDINATOR.read_text(encoding="utf-8"))
     coordinator = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "Coordinator")
-    names = ("set_pump_mode", "_async_set_and_verify_pump_mode", "update_pumps", "run_background")
+    names = ("set_pump", "set_pump_mode", "_async_set_and_verify_pump_mode", "update_pumps", "run_background")
     methods = [
         copy.deepcopy(next(
             n for n in coordinator.body
@@ -92,10 +92,10 @@ class FakeSpa:
 
 
 class OptimisticPumpModeTests(unittest.IsolatedAsyncioTestCase):
-    def make_coordinator(self, *, auto=True, enabled=True):
+    def make_coordinator(self, *, auto=True, enabled=True, speeds=2):
         co = isolated_coordinator()()
         co.state = {"pumps": {"1": {
-            "apiId": "pump-one", "state": "off", "auto": auto,
+            "apiId": "pump-one", "state": "off", "auto": auto, "speeds": speeds,
         }}}
         co._pump_mode_versions = {}
         co.spa = FakeSpa()
@@ -115,6 +115,52 @@ class OptimisticPumpModeTests(unittest.IsolatedAsyncioTestCase):
             co, "notifications", co.notifications + 1
         )
         return co
+
+    async def test_legacy_on_two_speed_maps_to_auto_and_verifies(self):
+        co = self.make_coordinator()
+        await co.set_pump("1", "on")
+        self.assertEqual(co.state["pumps"]["1"]["state"], "auto")
+        self.assertEqual(co.notifications, 1)
+        self.assertEqual(len(co.operations), 1)
+        await co.operations.pop()
+        self.assertEqual(co.spa.calls, [("pump-one", "auto", 5)])
+        self.assertEqual(co.spa.get_calls, 1)
+        self.assertEqual(co.state["pumps"]["1"]["state"], "auto")
+
+    async def test_legacy_off_two_speed_uses_verified_mode_path(self):
+        co = self.make_coordinator()
+        await co.set_pump("1", "off")
+        self.assertEqual(co.state["pumps"]["1"]["state"], "off")
+        await co.operations.pop()
+        self.assertEqual(co.spa.calls, [("pump-one", "off", 5)])
+        self.assertEqual(co.spa.get_calls, 1)
+
+    async def test_original_single_speed_on_off_payload_unchanged(self):
+        for state in ("on", "off"):
+            with self.subTest(state=state):
+                co = self.make_coordinator(speeds=1)
+                await co.set_pump("1", state)
+                self.assertEqual(co.state["pumps"]["1"]["state"], state)
+                self.assertEqual(co.notifications, 1)
+                self.assertEqual(len(co.operations), 1)
+                await co.operations.pop()
+                self.assertEqual(co.spa.calls, [("pump-one", state, 0)])
+                self.assertEqual(co.spa.get_calls, 0)
+
+    async def test_manual_single_speed_choice_retains_legacy_switch(self):
+        co = self.make_coordinator(speeds=2, enabled=False)
+        await co.set_pump("1", "on")
+        self.assertEqual(co.state["pumps"]["1"]["state"], "on")
+        await co.operations.pop()
+        self.assertEqual(co.spa.calls, [("pump-one", "on", 0)])
+        self.assertEqual(co.spa.get_calls, 0)
+
+    async def test_no_auto_does_not_assume_high_on_two_speed_pump(self):
+        co = self.make_coordinator(speeds=2, auto=False)
+        await co.set_pump("1", "on")
+        await co.operations.pop()
+        self.assertEqual(co.spa.calls, [("pump-one", "on", 0)])
+        self.assertEqual(co.spa.get_calls, 0)
 
     async def test_immediate_state_then_five_second_verification_for_all_modes(self):
         for mode in ("off", "auto", "low", "high"):
