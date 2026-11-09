@@ -142,7 +142,8 @@ class SourceIntegrationTests(unittest.TestCase):
         co = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
         self.assertIn('if v["hasSwitch"] or coordinator.is_forced_single_speed_switch(k, v):', sw)
         self.assertIn('f"Pump {k}"', sw)
-        self.assertIn('await self.spa.set_pump(pump["apiId"], state)', co)
+        self.assertIn('self.run_background(self.spa.set_pump(pump["apiId"], state))', co)
+        self.assertIn('await self.spa.set_pump(pump["apiId"], mode, 5)', co)
 
     def test_sensor_reports_real_hardware_speed_count(self):
         co = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
