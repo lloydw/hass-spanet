@@ -37,7 +37,7 @@ class PumpReadbackTests(unittest.IsolatedAsyncioTestCase):
             "low", lambda: state, refresh, sleep=sleep
         ))
         self.assertEqual(calls, ["GET"])
-        self.assertEqual(sleeps, [7])
+        self.assertEqual(sleeps, [5])
 
     async def test_eventual_consistency_uses_only_one_retry(self):
         state = "off"
@@ -57,7 +57,7 @@ class PumpReadbackTests(unittest.IsolatedAsyncioTestCase):
             "high", lambda: state, refresh, sleep=sleep
         ))
         self.assertEqual(calls, ["GET", "GET"])
-        self.assertEqual(sleeps, [7, 15])
+        self.assertEqual(sleeps, [5, 15])
 
     async def test_stale_api_never_fakes_new_mode(self):
         calls = []
@@ -124,14 +124,14 @@ class PumpReadbackTests(unittest.IsolatedAsyncioTestCase):
             await task
         self.assertEqual(calls, [])
 
-    def test_legacy_readback_helper_is_dormant_during_hardware_trials(self):
-        # Keep the offline-tested helper on this trial branch as a rollback
-        # reference; do not schedule it from the new optimistic command path.
+    def test_readback_is_reused_in_existing_background_worker(self):
+        # The verification GET is only scheduled after the cloud PUT completes,
+        # and belongs to the same background worker as the PUT.
         coordinator = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
         self.assertIn("self.pumps_task = self.scheduler.add_task(300, self.update_pumps)", coordinator)
-        self.assertIn('self.run_background(self.spa.set_pump(pump["apiId"], mode, 5))', coordinator)
-        self.assertNotIn("readback_until_confirmed", coordinator)
-        self.assertNotIn("_async_confirm_pump_mode", coordinator)
+        self.assertIn('self._async_set_and_verify_pump_mode(key, pump["apiId"], mode, version)', coordinator)
+        self.assertIn("readback_until_confirmed", coordinator)
+        self.assertIn("expected_mode_command=(key, version)", coordinator)
 
 
 
