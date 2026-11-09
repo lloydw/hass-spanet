@@ -1,4 +1,7 @@
+import asyncio
 from collections.abc import Coroutine
+from .pump_modes import normalize_pump_mode
+from .pump_readback import readback_until_confirmed
 from typing import Any
 import logging
 from datetime import timedelta
@@ -36,6 +39,7 @@ class Coordinator(DataUpdateCoordinator):
         self.state = {}
         self.spa = None
         self._initial_state_ready = False
+        self._pump_mode_versions = {}
 
         self.scheduler = Scheduler()
 
@@ -121,12 +125,10 @@ class Coordinator(DataUpdateCoordinator):
         self.async_update_listeners()
 
     async def set_pump_mode(self, key: str, mode: str):
-        """Control two-speed pump modes with upstream's responsive background writes.
+        """Optimistic UI update; submit command and verify cloud state after 5s.
 
-        Unlike the legacy on/off switch (pumpVariableSpeed=0), the SmartLINK
-        two-speed selector needs pumpVariableSpeed=5. The displayed mode is
-        optimistic until the cloud poll updates it; the shared background
-        error handler forces a refresh if the API rejects the command.
+        Two-speed SmartLINK commands require pumpVariableSpeed=5. Preserve the
+        original switch's parameter of 0 for backwards compatibility.
         """
         pump = self.get_state(f"{SK_PUMPS}.{key}")
         if not self.is_pump_mode_control_enabled(key, pump):
@@ -136,12 +138,49 @@ class Coordinator(DataUpdateCoordinator):
         if mode == "auto" and not pump.get("auto"):
             raise ValueError("This pump does not support automatic mode")
 
-        # Match upstream's immediate state/listener updates; still use the
-        # SmartLINK Android mode-specific API parameter, not the switch default.
+        # Reuse upstream's single background worker; do not block the UI or
+        # create a separate worker just to verify the mode.
+        self._pump_mode_versions[key] = self._pump_mode_versions.get(key, 0) + 1
+        version = self._pump_mode_versions[key]
         pump["state"] = mode
-        self.run_background(self.spa.set_pump(pump["apiId"], mode, 5))
+        self.run_background(
+            self._async_set_and_verify_pump_mode(key, pump["apiId"], mode, version)
+        )
         logger.debug("SET PUMP %s MODE %s (optimistic) -> %s", key, mode, self.state)
         self.async_update_listeners()
+
+    async def _async_set_and_verify_pump_mode(
+        self, key: str, api_id: str, mode: str, version: int
+    ) -> None:
+        """Wait for PUT, then reconcile against fresh cloud GETs (5s, +15s)."""
+        await self.spa.set_pump(api_id, mode, 5)
+        if self._pump_mode_versions.get(key) != version:
+            return  # A newer command superseded this one.
+
+        async def refresh_pumps() -> None:
+            if self._pump_mode_versions.get(key) != version:
+                raise asyncio.CancelledError()
+            # Unlike an optimistic cached state, a successful update_pumps
+            # call MUST fetch a fresh pump snapshot from the API. On HTTP 202,
+            # the exception propagates to our bounded retry helper.
+            await self.update_pumps(expected_mode_command=(key, version))
+            self.async_update_listeners()
+
+        confirmed = await readback_until_confirmed(
+            mode,
+            lambda: normalize_pump_mode(
+                self.get_state(f"{SK_PUMPS}.{key}.state")
+            ),
+            refresh_pumps,
+        )
+        if self._pump_mode_versions.get(key) != version:
+            return
+        if not confirmed:
+            logger.warning(
+                "Pump %s requested mode %s not confirmed by fresh cloud "
+                "GET within 5s + 15s; latest reported state retained",
+                key, mode,
+            )
 
     async def set_lights(self, state: str):
         lights = self.get_state(f"{SK_LIGHTS}")
@@ -366,9 +405,23 @@ class Coordinator(DataUpdateCoordinator):
             for task in self.tasks[1:]:
                 task.trigger()
 
-    async def update_pumps(self):
+    async def update_pumps(
+        self, *, expected_mode_command: tuple[str, int] | None = None
+    ):
         pump_data = await self.spa.get_pumps()
         logger.debug(f"Update Pumps {pump_data}")
+
+        if expected_mode_command is not None:
+            key, version = expected_mode_command
+            # Do not overwrite a newer optimistic command with an older GET.
+            if self._pump_mode_versions.get(key) != version:
+                raise asyncio.CancelledError()
+            # A successful HTTP response without the targeted pump is not
+            # proof of anything; never 'confirm' cached optimistic state.
+            entries = pump_data.get("pumpAndBlower", {}).get("pumps", [])
+            if not any(str(p.get("pumpNumber")) == str(key) and
+                       p.get("pumpStatus") is not None for p in entries):
+                raise ValueError("Fresh pump GET did not include requested pump")
 
         pumps = self.state.get("pumps", {})
         for p in pump_data.get("pumpAndBlower", {}).get("pumps", []):
