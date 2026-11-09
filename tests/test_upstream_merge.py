@@ -31,15 +31,15 @@ class UpstreamMergeCompatibilityTests(unittest.TestCase):
     def test_two_speed_mode_uses_upstream_background_submission(self):
         source = method_source("coordinator.py", "Coordinator", "set_pump_mode")
         self.assertIn('pump["state"] = mode', source)
-        self.assertIn('self.run_background(self.spa.set_pump(pump["apiId"], mode, 5))', source)
+        self.assertIn('self._async_set_and_verify_pump_mode(key, pump["apiId"], mode, version)', source)
         self.assertIn('self.async_update_listeners()', source)
         self.assertNotIn("await self.spa.set_pump", source)
-        self.assertNotIn("self._async_confirm_pump_mode", source)
+        self.assertIn("self._pump_mode_versions[key]", source)
 
     def test_pump_scheduler_interval_stays_unchanged(self):
         source = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
         self.assertIn("self.pumps_task = self.scheduler.add_task(300, self.update_pumps)", source)
-        self.assertNotIn("def _async_confirm_pump_mode(", source)
+        self.assertIn("async def _async_set_and_verify_pump_mode(", source)
 
     def test_background_scheduler_has_valid_annotations_and_name(self):
         source = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
