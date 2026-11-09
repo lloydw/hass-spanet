@@ -41,13 +41,17 @@ class Coordinator(DataUpdateCoordinator):
 
         self.scheduler = Scheduler()
 
+        # Keep direct handles to existing scheduler tasks so a pump-mode
+        # readback can request the normal pump refresh, not a second poller.
+        self.dashboard_task = self.scheduler.add_task(120, self.update_dashboard)
+        self.pumps_task = self.scheduler.add_task(300, self.update_pumps)
         self.tasks = [
-            self.scheduler.add_task(120, self.update_dashboard),
-            self.scheduler.add_task(300, self.update_pumps),
+            self.dashboard_task,
+            self.pumps_task,
             self.scheduler.add_task(1200, self.update_information),
             self.scheduler.add_task(1200, self.update_lights),
             self.scheduler.add_task(1200, self.update_filtration),
-            self.scheduler.add_task(1200, self.update_settings)
+            self.scheduler.add_task(1200, self.update_settings),
         ]
 
     @property
@@ -59,7 +63,7 @@ class Coordinator(DataUpdateCoordinator):
         return self.spa_config["id"]
 
     def queue_refresh(self):
-        self.tasks[0].trigger(20)
+        self.dashboard_task.trigger(20)
 
     def is_forced_single_speed_switch(self, key: str, pump) -> bool:
         """Add an On/Off switch only on explicit manual single-speed choice.
@@ -151,7 +155,7 @@ class Coordinator(DataUpdateCoordinator):
         async def fetch_pumps() -> None:
             # Force only the pump task due; DataUpdateCoordinator serializes
             # the subsequent refresh with its normal 60s update cycle.
-            self.tasks[1].trigger()
+            self.pumps_task.trigger()
             await self.async_request_refresh()
 
         try:
