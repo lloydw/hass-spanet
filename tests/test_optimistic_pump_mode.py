@@ -8,6 +8,8 @@ from __future__ import annotations
 import ast
 import copy
 import logging
+from collections.abc import Coroutine
+from typing import Any
 from pathlib import Path
 import unittest
 
@@ -20,15 +22,22 @@ def isolated_pump_method():
     coordinator = next(
         n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "Coordinator"
     )
-    method = next(
-        n for n in coordinator.body
-        if isinstance(n, ast.AsyncFunctionDef) and n.name == "set_pump_mode"
-    )
+    methods = [
+        copy.deepcopy(next(
+            n for n in coordinator.body
+            if isinstance(n, (ast.AsyncFunctionDef, ast.FunctionDef)) and n.name == name
+        ))
+        for name in ("set_pump_mode", "run_background")
+    ]
     holder = ast.ClassDef(
         name="IsolatedCoordinator", bases=[], keywords=[],
-        body=[copy.deepcopy(method)], decorator_list=[]
+        body=methods, decorator_list=[]
     )
-    namespace = {"SK_PUMPS": "pumps", "logger": logging.getLogger("test_pump")}
+    namespace = {
+        "SK_PUMPS": "pumps",
+        "logger": logging.getLogger("test_pump"),
+        "Coroutine": Coroutine, "Any": Any,
+    }
     module = ast.fix_missing_locations(ast.Module(body=[holder], type_ignores=[]))
     exec(compile(module, str(COORDINATOR), "exec"), namespace)
     return namespace["IsolatedCoordinator"]
@@ -72,6 +81,43 @@ class OptimisticPumpModeTests(unittest.IsolatedAsyncioTestCase):
                 # device-specific SetPump parameter is still 5, never 0.
                 await co.operations.pop()
                 self.assertEqual(co.spa.calls, [("pump-one", mode, 5)])
+
+    async def test_rejected_background_command_forces_cloud_state_refresh(self):
+        co = self.make_coordinator()
+        # Exercise the real run_background method, not the capture stub.
+        del co.run_background
+        events = []
+
+        class ConfigEntry:
+            def __init__(self):
+                self.tasks = []
+
+            def async_create_background_task(self, hass, coro, name, *, eager_start):
+                events.append(("background", name, eager_start))
+                self.tasks.append(coro)
+
+        co.hass = object()
+        co.config_entry = ConfigEntry()
+        co.queue_refresh = lambda: events.append("queue_refresh")
+
+        async def refresh():
+            events.append("request_refresh")
+            co.state["pumps"]["1"]["state"] = "off"  # API-reported actual mode
+
+        async def rejected_set_pump(pump_id, mode, speed):
+            raise RuntimeError("cloud refused command")
+
+        co.async_request_refresh = refresh
+        co.spa.set_pump = rejected_set_pump
+
+        await co.set_pump_mode("1", "high")
+        self.assertEqual(co.state["pumps"]["1"]["state"], "high")
+        self.assertEqual(co.notifications, 1)
+        self.assertEqual(len(co.config_entry.tasks), 1)
+        with self.assertRaisesRegex(RuntimeError, "cloud refused"):
+            await co.config_entry.tasks[0]
+        self.assertEqual(co.state["pumps"]["1"]["state"], "off")
+        self.assertEqual(events[-2:], ["queue_refresh", "request_refresh"])
 
     async def test_unverified_pump_rejected_without_any_state_mutation(self):
         co = self.make_coordinator(enabled=False)
