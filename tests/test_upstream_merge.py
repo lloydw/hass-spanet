@@ -28,16 +28,18 @@ class UpstreamMergeCompatibilityTests(unittest.TestCase):
         self.assertIn('self.run_background(self.spa.set_pump(pump["apiId"], state))', source)
         self.assertIn('self.async_update_listeners()', source)
 
-    def test_two_speed_mode_write_still_awaits_api_before_readback(self):
+    def test_two_speed_mode_uses_upstream_background_submission(self):
         source = method_source("coordinator.py", "Coordinator", "set_pump_mode")
-        self.assertIn('await self.spa.set_pump(pump["apiId"], mode, 5)', source)
-        self.assertIn('self._async_confirm_pump_mode(key, mode)', source)
-        self.assertNotIn('pump["state"] = mode', source)
+        self.assertIn('pump["state"] = mode', source)
+        self.assertIn('self.run_background(self.spa.set_pump(pump["apiId"], mode, 5))', source)
+        self.assertIn('self.async_update_listeners()', source)
+        self.assertNotIn("await self.spa.set_pump", source)
+        self.assertNotIn("self._async_confirm_pump_mode", source)
 
-    def test_readback_uses_existing_pump_scheduler_task(self):
-        source = method_source("coordinator.py", "Coordinator", "_async_confirm_pump_mode")
-        self.assertIn('self.pumps_task.trigger()', source)
-        self.assertIn('await self.async_request_refresh()', source)
+    def test_pump_scheduler_interval_stays_unchanged(self):
+        source = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
+        self.assertIn("self.pumps_task = self.scheduler.add_task(300, self.update_pumps)", source)
+        self.assertNotIn("def _async_confirm_pump_mode(", source)
 
     def test_background_scheduler_has_valid_annotations_and_name(self):
         source = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
