@@ -126,7 +126,9 @@ class PumpReadbackTests(unittest.IsolatedAsyncioTestCase):
 
     def test_background_readback_keeps_routine_pump_poll_unchanged(self):
         coordinator = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
-        self.assertIn("scheduler.add_task(300, self.update_pumps)", coordinator)
+        self.assertIn("self.pumps_task = self.scheduler.add_task(300, self.update_pumps)", coordinator)
+        self.assertIn("self.pumps_task.trigger()", coordinator)
+        self.assertNotIn("self.tasks[1].trigger()", coordinator)
         self.assertIn("self.config_entry.async_create_background_task(", coordinator)
         self.assertNotIn("self.tasks[1].trigger(10)", coordinator)
 
