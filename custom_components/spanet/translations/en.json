@@ -21,7 +21,7 @@
     "step": {
       "settings": {
         "title": "SpaNET Settings",
-        "description": "Pump type is detected automatically. Choose a mode for each pump only if you want to override the detected controls. Original pump switches and automations are preserved.",
+        "description": "Pump type is detected automatically. Choose a mode for each pump only if you want to override the detected controls. Original pump switches and automations are preserved. Saving changes automatically reloads the SpaNET integration; a full Home Assistant restart is not required.",
         "data": {
           "enable_heat_pump": "Enable Heat Pump"
         }
