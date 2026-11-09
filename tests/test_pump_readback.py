@@ -124,13 +124,15 @@ class PumpReadbackTests(unittest.IsolatedAsyncioTestCase):
             await task
         self.assertEqual(calls, [])
 
-    def test_background_readback_keeps_routine_pump_poll_unchanged(self):
+    def test_legacy_readback_helper_is_dormant_during_hardware_trials(self):
+        # Keep the offline-tested helper on this trial branch as a rollback
+        # reference; do not schedule it from the new optimistic command path.
         coordinator = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
         self.assertIn("self.pumps_task = self.scheduler.add_task(300, self.update_pumps)", coordinator)
-        self.assertIn("self.pumps_task.trigger()", coordinator)
-        self.assertNotIn("self.tasks[1].trigger()", coordinator)
-        self.assertIn("self.config_entry.async_create_background_task(", coordinator)
-        self.assertNotIn("self.tasks[1].trigger(10)", coordinator)
+        self.assertIn('self.run_background(self.spa.set_pump(pump["apiId"], mode, 5))', coordinator)
+        self.assertNotIn("readback_until_confirmed", coordinator)
+        self.assertNotIn("_async_confirm_pump_mode", coordinator)
+
 
 
 if __name__ == "__main__":
