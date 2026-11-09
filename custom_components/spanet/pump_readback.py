@@ -9,8 +9,8 @@ import asyncio
 from collections.abc import Awaitable, Callable, Sequence
 from typing import Any
 
-# First confirmation attempt after 7s; one more 15s later if needed.
-PUMP_READBACK_DELAYS_SECONDS = (7, 15)
+# First verification GET 5s after the PUT completes, retry 15s later.
+PUMP_READBACK_DELAYS_SECONDS = (5, 15)
 
 
 async def readback_until_confirmed(
