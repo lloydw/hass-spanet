@@ -14,6 +14,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import *
 from .entity import SpaEntity
+from .pump_modes import normalize_pump_mode, has_mode_sensor
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -33,6 +34,8 @@ async def async_setup_entry(
         ]
 
         for k, v in coordinator.get_state(SK_PUMPS).items():
+            if has_mode_sensor(v) or coordinator.is_pump_mode_control_enabled(k, v):
+                entities.append(SpaPumpModeSensor(coordinator, k))
             if not v["hasSwitch"]:
                 entities.append(SpaBinarySensor(coordinator, f"Pump {k}", f"pumps.{k}.state"))
 
@@ -46,6 +49,29 @@ class SpaSensor(SpaEntity):
         super().__init__(coordinator, "sensor", name)
         self.hass = coordinator.hass
         self._status_id = status_id
+
+
+class SpaPumpModeSensor(SpaSensor, SensorEntity):
+    """Read-only reported mode for a multi-speed pump."""
+
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = ["off", "low", "high", "auto", "on"]
+
+    def __init__(self, coordinator, pump_number) -> None:
+        self._pump_number = str(pump_number)
+        super().__init__(coordinator, f"Pump {pump_number} Mode", f"{SK_PUMPS}.{pump_number}.state")
+
+    @property
+    def native_value(self):
+        return normalize_pump_mode(self.coordinator.get_state(self._status_id))
+
+    @property
+    def extra_state_attributes(self):
+        pump = self.coordinator.get_state(f"{SK_PUMPS}.{self._pump_number}")
+        return {
+            "reported_speed_count": pump.get("speeds"),
+            "supports_auto": pump.get("auto"),
+        }
 
 
 class SpaTemperatureSensor(SpaSensor, SensorEntity):
