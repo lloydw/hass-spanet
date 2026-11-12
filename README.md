@@ -111,3 +111,4 @@ The spa light is a full RGB `light` entity — brightness, a colour wheel that s
 # shout out to our contributors!
 
 [@montoyenn-spec](https://github.com/montoyenn-spec) - blower, lights, settings, bug fixes
+[@Galahad2304](https://github.com/Galahad2304) - multi-speed pump support, start up checks, automated tests
