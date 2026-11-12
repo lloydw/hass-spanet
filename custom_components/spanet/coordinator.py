@@ -1,3 +1,8 @@
+import asyncio
+from collections.abc import Coroutine
+from .pump_modes import normalize_pump_mode
+from .pump_readback import readback_until_confirmed
+from typing import Any
 import logging
 from datetime import timedelta
 import async_timeout
@@ -8,6 +13,12 @@ from homeassistant.helpers.update_coordinator import (
 from .const import *
 from .spanet import SpaNetApiError
 from .scheduler import Scheduler
+from .pump_options import (
+    configured_mode,
+    user_confirmed_unverified_two_speed,
+    allows_two_speed_control,
+)
+from .startup import missing_startup_keys
 
 logger = logging.getLogger(__name__)
 
@@ -27,16 +38,21 @@ class Coordinator(DataUpdateCoordinator):
         self.config_entry = config_entry
         self.state = {}
         self.spa = None
+        self._initial_state_ready = False
+        self._pump_mode_versions = {}
 
         self.scheduler = Scheduler()
 
+        # Retain existing scheduler tasks and normal polling intervals.
+        self.dashboard_task = self.scheduler.add_task(120, self.update_dashboard)
+        self.pumps_task = self.scheduler.add_task(300, self.update_pumps)
         self.tasks = [
-            self.scheduler.add_task(120, self.update_dashboard),
-            self.scheduler.add_task(300, self.update_pumps),
+            self.dashboard_task,
+            self.pumps_task,
             self.scheduler.add_task(1200, self.update_information),
             self.scheduler.add_task(1200, self.update_lights),
             self.scheduler.add_task(1200, self.update_filtration),
-            self.scheduler.add_task(1200, self.update_settings)
+            self.scheduler.add_task(1200, self.update_settings),
         ]
 
     @property
@@ -48,8 +64,32 @@ class Coordinator(DataUpdateCoordinator):
         return self.spa_config["id"]
 
     def queue_refresh(self):
+        # Match upstream: on failed API writes, reschedule all existing tasks.
         for task in self.tasks:
             task.trigger()
+
+    def is_forced_single_speed_switch(self, key: str, pump) -> bool:
+        """Add an On/Off switch only on explicit manual single-speed choice.
+
+        Default auto retains upstream switch eligibility exactly unchanged.
+        """
+        from .pump_options import PUMP_CONTROL_SINGLE
+        return (
+            configured_mode(self.config_entry.options, self.spa_id, str(key))
+            == PUMP_CONTROL_SINGLE
+            and bool(pump.get("canSwitchOn"))
+        )
+
+    def is_pump_mode_control_enabled(self, key: str, pump=None) -> bool:
+        """Resolve per-spa GUI preference; do not change legacy switches."""
+        if pump is None:
+            pump = self.get_state(f"{SK_PUMPS}.{key}")
+        options = self.config_entry.options
+        return allows_two_speed_control(
+            pump,
+            configured_mode(options, self.spa_id, str(key)),
+            user_confirmed_unverified_two_speed(options, self.spa_id, str(key)),
+        )
 
     def get_state(self, key: str, sub_key=None):
         obj = self.state
@@ -78,11 +118,87 @@ class Coordinator(DataUpdateCoordinator):
         self.async_update_listeners()
 
     async def set_pump(self, key: str, state: str):
+        """Preserve legacy switches, but route known two-speed pumps safely.
+
+        On a confirmed two-speed pump with Auto, the legacy "on" command
+        is not a pump mode. Use Auto/Off via the same verified mode path,
+        keeping the original switch entity ID and single-speed semantics.
+        """
         pump = self.get_state(f"{SK_PUMPS}.{key}")
+        if (
+            pump.get("speeds") == 2
+            and pump.get("auto")
+            and self.is_pump_mode_control_enabled(key, pump)
+            and state in ("on", "off")
+        ):
+            mode = "auto" if state == "on" else "off"
+            await self.set_pump_mode(key, mode)
+            return
+
+        # Single-speed, explicitly forced single-speed, and pumps without
+        # Auto retain the original upstream On/Off behaviour and API payload.
         pump["state"] = state
         self.run_background(self.spa.set_pump(pump["apiId"], state))
         logger.debug(f"SET PUMP {key}: {state} -> {self.state}")
         self.async_update_listeners()
+
+    async def set_pump_mode(self, key: str, mode: str):
+        """Optimistic UI update; submit command and verify cloud state after 5s.
+
+        Two-speed SmartLINK commands require pumpVariableSpeed=5. Preserve the
+        original switch's parameter of 0 for backwards compatibility.
+        """
+        pump = self.get_state(f"{SK_PUMPS}.{key}")
+        if not self.is_pump_mode_control_enabled(key, pump):
+            raise ValueError("Two-speed control is not enabled for this pump")
+        if mode not in ("off", "low", "high", "auto"):
+            raise ValueError(f"Unsupported SpaNET pump mode: {mode!r}")
+        if mode == "auto" and not pump.get("auto"):
+            raise ValueError("This pump does not support automatic mode")
+
+        # Reuse upstream's single background worker; do not block the UI or
+        # create a separate worker just to verify the mode.
+        self._pump_mode_versions[key] = self._pump_mode_versions.get(key, 0) + 1
+        version = self._pump_mode_versions[key]
+        pump["state"] = mode
+        self.run_background(
+            self._async_set_and_verify_pump_mode(key, pump["apiId"], mode, version)
+        )
+        logger.debug("SET PUMP %s MODE %s (optimistic) -> %s", key, mode, self.state)
+        self.async_update_listeners()
+
+    async def _async_set_and_verify_pump_mode(
+        self, key: str, api_id: str, mode: str, version: int
+    ) -> None:
+        """Wait for PUT, then reconcile against fresh cloud GETs (5s, +15s)."""
+        await self.spa.set_pump(api_id, mode, 5)
+        if self._pump_mode_versions.get(key) != version:
+            return  # A newer command superseded this one.
+
+        async def refresh_pumps() -> None:
+            if self._pump_mode_versions.get(key) != version:
+                raise asyncio.CancelledError()
+            # Unlike an optimistic cached state, a successful update_pumps
+            # call MUST fetch a fresh pump snapshot from the API. On HTTP 202,
+            # the exception propagates to our bounded retry helper.
+            await self.update_pumps(expected_mode_command=(key, version))
+            self.async_update_listeners()
+
+        confirmed = await readback_until_confirmed(
+            mode,
+            lambda: normalize_pump_mode(
+                self.get_state(f"{SK_PUMPS}.{key}.state")
+            ),
+            refresh_pumps,
+        )
+        if self._pump_mode_versions.get(key) != version:
+            return
+        if not confirmed:
+            logger.warning(
+                "Pump %s requested mode %s not confirmed by fresh cloud "
+                "GET within 5s + 15s; latest reported state retained",
+                key, mode,
+            )
 
     async def set_lights(self, state: str):
         lights = self.get_state(f"{SK_LIGHTS}")
@@ -212,21 +328,26 @@ class Coordinator(DataUpdateCoordinator):
         logger.debug(f"SET SANITISE TIME: {time_str} -> {self.state}")
         self.async_update_listeners()
 
-    def run_background(self, target: Coroutine[Any, Any, _R]):
+    def run_background(self, target: Coroutine[Any, Any, Any]) -> None:
+        """Run existing cloud API writes in the background, as upstream does.
+
+        Keep the task attached to this config entry for cleanup on unload.
+        """
+        task_name = getattr(getattr(target, "cr_code", None), "co_name", "api_call")
 
         async def wrapped_target():
             try:
                 return await target
             except Exception:
+                logger.exception("SpaNET background command %s failed", task_name)
                 self.queue_refresh()
                 await self.async_request_refresh()
                 raise
 
-
         self.config_entry.async_create_background_task(
             self.hass,
             wrapped_target(),
-            f"SpaNET:{target.__name__}",
+            f"SpaNET:{task_name}",
             eager_start=False,
         )
 
@@ -248,6 +369,24 @@ class Coordinator(DataUpdateCoordinator):
 
     async def refresh_state(self):
         await self.scheduler.tick()
+        if not self._initial_state_ready:
+            # The scheduler intentionally catches individual API failures.
+            # Without this guard an initial API 202 leaves state={} while
+            # Home Assistant incorrectly treats config entry setup as ready.
+            # UpdateFailed in the first coordinator refresh is converted by
+            # Home Assistant to ConfigEntryNotReady with automatic backoff.
+            missing = missing_startup_keys(
+                self.state,
+                heat_pump_enabled=self.config_entry.options.get(
+                    OPT_ENABLE_HEAT_PUMP, False
+                ),
+            )
+            if missing:
+                raise UpdateFailed(
+                    "SpaNET initial cloud snapshot incomplete "
+                    f"(missing: {', '.join(missing)}); retrying setup"
+                )
+            self._initial_state_ready = True
         logger.debug(f"Spa {self.spa_id} Status: {self.state}")
 
     async def update_dashboard(self):
@@ -284,9 +423,23 @@ class Coordinator(DataUpdateCoordinator):
             for task in self.tasks[1:]:
                 task.trigger()
 
-    async def update_pumps(self):
+    async def update_pumps(
+        self, *, expected_mode_command: tuple[str, int] | None = None
+    ):
         pump_data = await self.spa.get_pumps()
         logger.debug(f"Update Pumps {pump_data}")
+
+        if expected_mode_command is not None:
+            key, version = expected_mode_command
+            # Do not overwrite a newer optimistic command with an older GET.
+            if self._pump_mode_versions.get(key) != version:
+                raise asyncio.CancelledError()
+            # A successful HTTP response without the targeted pump is not
+            # proof of anything; never 'confirm' cached optimistic state.
+            entries = pump_data.get("pumpAndBlower", {}).get("pumps", [])
+            if not any(str(p.get("pumpNumber")) == str(key) and
+                       p.get("pumpStatus") is not None for p in entries):
+                raise ValueError("Fresh pump GET did not include requested pump")
 
         pumps = self.state.get("pumps", {})
         for p in pump_data.get("pumpAndBlower", {}).get("pumps", []):
@@ -295,9 +448,17 @@ class Coordinator(DataUpdateCoordinator):
                 pumps[pump_id] = {}
             pump = pumps.get(pump_id)
             pump["apiId"] = str(p["id"])
-            pump["auto"] = p["hasAuto"]
-            pump["speeds"] = 1 # p["pumpSpeed"] Multiple speeds not supported
-            pump["hasSwitch"] = p["canSwitchOn"] and (not p["hasAuto"] or p["pumpSpeed"] > 1)
+            pump["auto"] = bool(p.get("hasAuto", False))
+            try:
+                pump["speeds"] = max(1, int(p.get("pumpSpeed", 1)))
+            except (TypeError, ValueError):
+                pump["speeds"] = 1
+            pump["canSwitchOn"] = bool(p.get("canSwitchOn"))
+            # Keep the existing switch eligibility logic unchanged.
+            pump["hasSwitch"] = pump["canSwitchOn"] and (
+                not pump["auto"] or pump["speeds"] > 1
+            )
+            pump["variable_speed"] = p.get("pumpVariableSpeed")
             pump["state"] = p["pumpStatus"]
 
         self.state[SK_PUMPS] = pumps

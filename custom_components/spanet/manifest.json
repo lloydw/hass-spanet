@@ -1,16 +1,17 @@
 {
   "domain": "spanet",
   "name": "SpaNET",
-  "codeowners": ["@lloydw"],
+  "codeowners": [
+    "@lloydw"
+  ],
   "config_flow": true,
   "dependencies": [],
   "documentation": "https://github.com/lloydw/hass-spanet",
   "homekit": {},
   "iot_class": "cloud_polling",
   "issue_tracker": "https://github.com/lloydw/hass-spanet/issues",
-  "requirements": ["pyjwt","requests"],
+  "requirements": [],
   "ssdp": [],
   "version": "1.2.0",
   "zeroconf": []
 }
-

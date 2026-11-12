@@ -9,6 +9,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import *
 from .entity import SpaEntity
+from .pump_modes import switch_on_from_status
 
 def partial(callback, arg1):
     async def m(*args):
@@ -25,7 +26,10 @@ async def async_setup_entry(
 
     for coordinator in hass.data[DOMAIN]["spas"]:
         for k, v in coordinator.get_state(SK_PUMPS).items():
-            if v["hasSwitch"] and v["speeds"] == 1:
+            # Stage 1: retain the existing switch (and its entity ID) for
+            # multi-speed pumps until the V2 command mapping is verified.
+            # The detailed reported mode is available as a read-only sensor.
+            if v["hasSwitch"] or coordinator.is_forced_single_speed_switch(k, v):
                 entities.append(SpaSwitch(coordinator, f"Pump {k}", f"{SK_PUMPS}.{k}.state", partial(coordinator.set_pump, k)))
 
         entities.append(SpaSwitch(coordinator, f"Lights", f"{SK_LIGHTS}.state", coordinator.set_lights))
@@ -55,13 +59,7 @@ class SpaSwitch(SpaEntity, SwitchEntity):
     @property
     def is_on(self):
         value = self.coordinator.get_state(self._state_key)
-        if value is None or value == "":
-            return None
-        if value == "on" or value == "auto":
-            return True
-        if value == "off":
-            return False
-        return int(value) == 1
+        return switch_on_from_status(value)
 
     async def async_turn_on(self, **kwargs):
         await self._switch_callback("on")
